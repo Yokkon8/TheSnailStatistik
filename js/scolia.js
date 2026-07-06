@@ -90,6 +90,12 @@ export function scoliaYearValue(metric, year) {
   return vals.reduce((a, b) => a + b, 0);
 }
 
+// Jahreswerte für die Gesamt-Ansicht: ein Balken pro Jahr
+export function yearlyValues(metric) {
+  const years = [...new Set(Object.keys(metric.values).map((k) => k.slice(0, 4)))].sort();
+  return years.map((year) => ({ year, value: scoliaYearValue(metric, year) ?? 0 }));
+}
+
 // Monatswerte fürs Balkendiagramm – tägliche Daten werden zu Monaten gebündelt
 export function monthlyValues(metric, year) {
   const buckets = Array.from({ length: 12 }, () => []);
