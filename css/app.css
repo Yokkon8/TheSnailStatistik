@@ -291,6 +291,17 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   gap: 4px;
   height: 150px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.grid-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .bar-slot {

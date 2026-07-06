@@ -3,16 +3,54 @@ import { auth } from "./auth.js";
 import { sync } from "./sync.js";
 import {
   importScoliaFiles,
-  scoliaYearValue,
+  scoliaRangeValue,
   monthlyValues,
   yearlyValues,
-  rollingMonthlyValues,
   lastDailyValues,
+  monthDailyValues,
   scoliaHighlightEvents,
 } from "./scolia.js";
 
 const view = document.getElementById("view");
-const state = { year: null, filter: "alle", chartMetric: null, chartView: null };
+const state = { year: null, month: 0, filter: "alle", chartMetric: null };
+
+const MONATSNAMEN = [
+  "Januar", "Februar", "März", "April", "Mai", "Juni",
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
+];
+
+function lastNDayKeys(n) {
+  const keys = new Set();
+  const jetzt = new Date();
+  for (let i = 0; i < n; i++) {
+    const d = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate() - i);
+    keys.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return keys;
+}
+
+// Der gewählte Zeitraum steuert Karten, Listen und Diagramm gemeinsam.
+// test() prüft Datums-Schlüssel, mode bestimmt die Diagramm-Zeitachse.
+function periodInfo() {
+  if (state.year === "gesamt") {
+    return { test: () => true, mode: "jahre", label: "alle Jahre" };
+  }
+  if (state.year === "j7" || state.year === "j30") {
+    const anzahl = state.year === "j7" ? 7 : 30;
+    const keys = lastNDayKeys(anzahl);
+    return { test: (d) => keys.has(d), mode: "tage", anzahl, label: `letzte ${anzahl} Tage` };
+  }
+  if (state.month) {
+    const monthKey = `${state.year}-${String(state.month).padStart(2, "0")}`;
+    return {
+      test: (d) => d.startsWith(monthKey),
+      mode: "monatstage",
+      monthKey,
+      label: `${MONATSNAMEN[state.month - 1]} ${state.year}`,
+    };
+  }
+  return { test: (d) => d.startsWith(state.year), mode: "monate", year: state.year, label: state.year };
+}
 
 // ---------- Hilfsfunktionen ----------
 
@@ -74,11 +112,12 @@ function highlightRow(h, withDelete) {
 // Manuelle Highlights + aus Scolia abgeleitete Ereignisse, ohne Doppelzählung:
 // manuelle Einträge mit Quelle Scolia entfallen, wenn derselbe Typ bereits
 // automatisch aus dem Scolia-Import kommt.
-function combinedEvents(data, prefix) {
-  const virtual = scoliaHighlightEvents(data.scolia).filter((e) => e.date.startsWith(prefix));
-  const importedTypes = new Set(virtual.map((e) => e.type));
+function combinedEvents(data, testFn) {
+  const alleVirtuellen = scoliaHighlightEvents(data.scolia);
+  const importedTypes = new Set(alleVirtuellen.map((e) => e.type));
+  const virtual = alleVirtuellen.filter((e) => testFn(e.date));
   const manual = data.highlights.filter(
-    (h) => h.date.startsWith(prefix) && !(h.source === "scolia" && importedTypes.has(h.type))
+    (h) => testFn(h.date) && !(h.source === "scolia" && importedTypes.has(h.type))
   );
   return [...manual, ...virtual];
 }
@@ -105,9 +144,8 @@ function syncInfoText() {
   return "Noch nicht synchronisiert.";
 }
 
-// Scolia-Sektion der Übersicht: Jahreswerte + Balkendiagramm
-// (prefix = Jahr wie "2026" oder "" für die Gesamt-Ansicht)
-function scoliaSection(data, prefix, isGesamt) {
+// Scolia-Sektion der Übersicht: Karten und Diagramm folgen dem gewählten Zeitraum
+function scoliaSection(data, info) {
   const metrics = Object.values(data.scolia ?? {});
   if (!metrics.length) return "";
 
@@ -115,7 +153,7 @@ function scoliaSection(data, prefix, isGesamt) {
   // hier nur die reinen Spielstatistiken zeigen.
   const cards = metrics
     .filter((m) => !m.key.includes("180") && !m.key.includes("best"))
-    .map((m) => ({ metric: m, value: scoliaYearValue(m, prefix) }))
+    .map((m) => ({ metric: m, value: scoliaRangeValue(m, info.test) }))
     .filter((c) => c.value !== null)
     .map(
       (c) => `
@@ -126,62 +164,57 @@ function scoliaSection(data, prefix, isGesamt) {
     )
     .join("");
 
-  // Diagramm-Auswahl: welche Statistik, welche Zeitachse
   if (!state.chartMetric || !data.scolia[state.chartMetric]) {
     state.chartMetric = data.scolia.x01_games ? "x01_games" : metrics[0].key;
   }
   const chartMetric = data.scolia[state.chartMetric];
-  if (!state.chartView) state.chartView = isGesamt ? "jahre" : "monate";
-  if (state.chartView === "tage" && chartMetric.granularity !== "daily") state.chartView = "monate";
 
   return `
-    <h2>Spielstatistik <span class="h2-sub">aus Scolia</span></h2>
-    ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Für ${isGesamt ? "diesen Zeitraum" : esc(prefix)} sind keine Scolia-Werte importiert.</div>`}
+    <h2>Spielstatistik <span class="h2-sub">aus Scolia · ${esc(info.label)}</span></h2>
+    ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Keine Scolia-Werte im Zeitraum (${esc(info.label)}).</div>`}
     <div class="toolbar" style="margin:16px 0 0;">
       <select id="chart-metric" class="year-select">
         ${metrics
           .map((m) => `<option value="${esc(m.key)}" ${m.key === state.chartMetric ? "selected" : ""}>${esc(m.label)}</option>`)
           .join("")}
       </select>
-      <select id="chart-view" class="year-select">
-        <option value="jahre" ${state.chartView === "jahre" ? "selected" : ""}>Jahre</option>
-        <option value="monate" ${state.chartView === "monate" ? "selected" : ""}>Monate</option>
-        ${chartMetric.granularity === "daily" ? `<option value="tage" ${state.chartView === "tage" ? "selected" : ""}>Letzte 30 Tage</option>` : ""}
-      </select>
     </div>
-    ${barChart(chartMetric, prefix, isGesamt, state.chartView)}
+    ${barChart(chartMetric, info)}
   `;
 }
 
-function barChart(metric, prefix, isGesamt, view) {
+// Die Zeitachse des Diagramms folgt dem Zeitraum automatisch:
+// alle Jahre → Jahresbalken, Jahr → Monatsbalken, Monat/letzte Tage → Tagesbalken
+function barChart(metric, info) {
   let daten, untertitel;
-  if (view === "tage") {
-    daten = lastDailyValues(metric, 30) ?? [];
-    untertitel = `${esc(metric.label)} – letzte 30 Tage`;
-  } else if (view === "monate") {
-    if (isGesamt) {
-      daten = rollingMonthlyValues(metric, 12);
-      untertitel = `${esc(metric.label)} – letzte 12 Monate`;
-    } else {
-      const monate = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
-      daten = monthlyValues(metric, prefix).map((v, i) => ({ label: monate[i], value: v }));
-      untertitel = `${esc(metric.label)} pro Monat ${esc(prefix)}`;
-    }
-  } else {
+  if (info.mode === "jahre") {
     daten = yearlyValues(metric).map((e) => ({ label: e.year, value: e.value ?? 0 }));
     untertitel = `${esc(metric.label)} pro Jahr`;
+  } else if (info.mode === "monate") {
+    const monate = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+    daten = monthlyValues(metric, info.year).map((v, i) => ({ label: monate[i], value: v }));
+    untertitel = `${esc(metric.label)} pro Monat ${esc(info.year)}`;
+  } else if (info.mode === "monatstage") {
+    daten = monthDailyValues(metric, info.monthKey) ?? [];
+    untertitel = `${esc(metric.label)} pro Tag – ${esc(info.label)}`;
+  } else {
+    daten = lastDailyValues(metric, info.anzahl) ?? [];
+    untertitel = `${esc(metric.label)} pro Tag – ${esc(info.label)}`;
   }
 
   if (!daten.length || !daten.some((d) => d.value > 0)) {
-    return `<div class="panel empty" style="margin-top:12px;">Keine Werte für diese Ansicht.</div>`;
+    return `<div class="panel empty" style="margin-top:12px;">Keine Werte im Zeitraum (${esc(info.label)}).</div>`;
   }
 
   const max = Math.max(...daten.map((d) => d.value));
-  const dicht = daten.length > 14; // bei vielen Balken: Werte weglassen, nur jede 5. Beschriftung
+  const dicht = daten.length > 16; // bei vielen Balken: Werte weglassen, nur jede 5. Beschriftung
   const spalten = `grid-template-columns:repeat(${daten.length},1fr);`;
   return `
     <div class="panel bar-chart">
       <div class="bars" style="${spalten}">
+        <div class="grid-line" style="bottom:25%"></div>
+        <div class="grid-line" style="bottom:50%"></div>
+        <div class="grid-line" style="bottom:75%"></div>
         ${daten
           .map(
             (d) => `
@@ -201,7 +234,7 @@ function barChart(metric, prefix, isGesamt, view) {
           .map((d, i) => `<div class="bar-label">${dicht && i % 5 !== 0 ? "" : esc(String(d.label))}</div>`)
           .join("")}
       </div>
-      <div class="hl-sub" style="margin-top:10px;">${untertitel}</div>
+      <div class="hl-sub" style="margin-top:10px;">${untertitel}${dicht ? ` &middot; Höchstwert ${fmtNum(max)}` : ""}</div>
     </div>`;
 }
 
@@ -217,14 +250,15 @@ function renderDashboard(root) {
     Object.keys(m.values).forEach((k) => years.add(k.slice(0, 4)))
   );
   const yearList = [...years].sort().reverse();
-  if (!state.year || (state.year !== "gesamt" && !yearList.includes(state.year))) {
+  const sonderZeitraeume = ["gesamt", "j7", "j30"];
+  if (!state.year || (!sonderZeitraeume.includes(state.year) && !yearList.includes(state.year))) {
     state.year = currentYear;
   }
+  const istJahr = /^\d{4}$/.test(state.year);
+  if (!istJahr) state.month = 0;
 
-  const isGesamt = state.year === "gesamt";
-  const prefix = isGesamt ? "" : state.year; // startsWith("") trifft alles
-
-  const events = combinedEvents(data, prefix);
+  const info = periodInfo();
+  const events = combinedEvents(data, info.test);
   const count = (type) => events.filter((e) => e.type === type).reduce((s, e) => s + (e.count ?? 1), 0);
   const shortlegs = events.filter((e) => e.type === "shortleg");
   const bestLeg = shortlegs.length ? Math.min(...shortlegs.map((h) => h.value)) : null;
@@ -236,11 +270,21 @@ function renderDashboard(root) {
     <p class="page-sub">Deine Dart-Highlights auf einen Blick.</p>
     ${loginBanner()}
     <div class="toolbar">
-      <label for="year-select" style="color:var(--muted);font-weight:600;">Jahr:</label>
+      <label for="year-select" style="color:var(--muted);font-weight:600;">Zeitraum:</label>
       <select id="year-select" class="year-select">
-        <option value="gesamt" ${isGesamt ? "selected" : ""}>Alle Jahre</option>
+        <option value="gesamt" ${state.year === "gesamt" ? "selected" : ""}>Alle Jahre</option>
+        <option value="j7" ${state.year === "j7" ? "selected" : ""}>Letzte 7 Tage</option>
+        <option value="j30" ${state.year === "j30" ? "selected" : ""}>Letzte 30 Tage</option>
         ${yearList.map((y) => `<option value="${y}" ${y === state.year ? "selected" : ""}>${y}</option>`).join("")}
       </select>
+      ${
+        istJahr
+          ? `<select id="month-select" class="year-select">
+              <option value="0">Ganzes Jahr</option>
+              ${MONATSNAMEN.map((m, i) => `<option value="${i + 1}" ${state.month === i + 1 ? "selected" : ""}>${m}</option>`).join("")}
+            </select>`
+          : ""
+      }
     </div>
     <div class="stat-grid">
       <div class="stat"><div class="stat-num gold">${fmtNum(count("180"))}</div><div class="stat-label">180er</div></div>
@@ -250,12 +294,12 @@ function renderDashboard(root) {
       <div class="stat"><div class="stat-num">${bestLeg ? bestLeg : "–"}</div><div class="stat-label">Bestes Leg (Darts)</div></div>
     </div>
     ${hatScoliaAnteil ? `<div class="hl-sub" style="margin-top:8px;">Zusammengefasst aus manueller Erfassung und Scolia-Import.</div>` : ""}
-    ${scoliaSection(data, prefix, isGesamt)}
+    ${scoliaSection(data, info)}
     <h2>Letzte Highlights</h2>
     ${
       latest.length
         ? `<ul class="hl-list">${latest.map((h) => highlightRow(h, false)).join("")}</ul>`
-        : `<div class="panel empty">Noch keine Highlights ${isGesamt ? "erfasst" : "in " + esc(state.year)}.<br>Trag dein erstes unter <a href="#/erfassen">Erfassen</a> ein! 🎯</div>`
+        : `<div class="panel empty">Keine Highlights im Zeitraum (${esc(info.label)}).<br>Trag eins unter <a href="#/erfassen">Erfassen</a> ein! 🎯</div>`
     }
     ${
       store.hasDemo()
@@ -266,15 +310,16 @@ function renderDashboard(root) {
 
   root.querySelector("#year-select").addEventListener("change", (e) => {
     state.year = e.target.value;
+    state.month = 0;
+    renderDashboard(root);
+  });
+  root.querySelector("#month-select")?.addEventListener("change", (e) => {
+    state.month = Number(e.target.value);
     renderDashboard(root);
   });
   root.querySelector("#btn-login")?.addEventListener("click", () => auth.login());
   root.querySelector("#chart-metric")?.addEventListener("change", (e) => {
     state.chartMetric = e.target.value;
-    renderDashboard(root);
-  });
-  root.querySelector("#chart-view")?.addEventListener("change", (e) => {
-    state.chartView = e.target.value;
     renderDashboard(root);
   });
 }
@@ -290,7 +335,7 @@ function renderHighlights(root) {
     ["highfinish", "High Finish"],
     ["shortleg", "Short Legs"],
   ];
-  const events = combinedEvents(data, "");
+  const events = combinedEvents(data, () => true);
   const list = sortedHighlights(
     state.filter === "alle" ? events : events.filter((h) => h.type === state.filter)
   );

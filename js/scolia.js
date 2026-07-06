@@ -94,11 +94,12 @@ export function scoliaHighlightEvents(scoliaMap) {
   return events;
 }
 
-// Jahreswert einer Metrik: Summe – außer bei "best" (Minimum) und
-// Durchschnitts-/Quotenwerten (Mittelwert ohne spielfreie Tage).
-export function scoliaYearValue(metric, year) {
+// Wert einer Metrik über einen beliebigen Zeitraum: Summe – außer bei "best"
+// (Minimum) und Durchschnitts-/Quotenwerten (Mittelwert ohne spielfreie Tage).
+// testFn prüft die Datums-Schlüssel (z. B. "2026-07-05" oder "2026-07").
+export function scoliaRangeValue(metric, testFn) {
   let vals = Object.entries(metric.values)
-    .filter(([k]) => k.startsWith(year))
+    .filter(([k]) => testFn(k))
     .map(([, v]) => v);
   if (!vals.length) return null;
   if (metric.key.includes("best")) {
@@ -111,6 +112,21 @@ export function scoliaYearValue(metric, year) {
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   }
   return vals.reduce((a, b) => a + b, 0);
+}
+
+export function scoliaYearValue(metric, year) {
+  return scoliaRangeValue(metric, (k) => k.startsWith(year));
+}
+
+// Alle Tage eines Monats (nur für täglich exportierte Statistiken)
+export function monthDailyValues(metric, monthKey) {
+  if (metric.granularity !== "daily") return null;
+  const [jahr, monat] = monthKey.split("-").map(Number);
+  const tageImMonat = new Date(jahr, monat, 0).getDate();
+  return Array.from({ length: tageImMonat }, (_, i) => {
+    const key = `${monthKey}-${String(i + 1).padStart(2, "0")}`;
+    return { label: `${i + 1}.`, value: metric.values[key] ?? 0 };
+  });
 }
 
 // Bündelt Einzelwerte: Summe – bei Durchschnitts-/Quotenwerten Mittelwert
