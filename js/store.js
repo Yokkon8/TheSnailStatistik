@@ -52,7 +52,14 @@ export function newId() {
 }
 
 function emptyData() {
-  return { settings: { name: "" }, settingsUpdatedAt: "", highlights: [], deletedIds: [] };
+  return {
+    settings: { name: "" },
+    settingsUpdatedAt: "",
+    highlights: [],
+    deletedIds: [],
+    scolia: {},
+    scoliaClearedAt: "",
+  };
 }
 
 // Führt lokalen und entfernten Stand zusammen: Vereinigung aller Einträge
@@ -65,11 +72,27 @@ export function mergeData(local, remote) {
     byId.set(h.id, h);
   }
   const localNewer = (local.settingsUpdatedAt ?? "") >= (remote.settingsUpdatedAt ?? "");
+
+  // Scolia-Metriken: pro Diagramm gewinnt der neuere Import;
+  // nach "Alle Daten löschen" (scoliaClearedAt) bleiben ältere Importe draußen.
+  const clearedAt = [local.scoliaClearedAt ?? "", remote.scoliaClearedAt ?? ""].sort().pop();
+  const scolia = {};
+  for (const src of [remote.scolia ?? {}, local.scolia ?? {}]) {
+    for (const [key, metric] of Object.entries(src)) {
+      if ((metric.importedAt ?? "") <= clearedAt) continue;
+      if (!scolia[key] || (metric.importedAt ?? "") > (scolia[key].importedAt ?? "")) {
+        scolia[key] = metric;
+      }
+    }
+  }
+
   return {
     settings: (localNewer ? local.settings : remote.settings) ?? { name: "" },
     settingsUpdatedAt: localNewer ? (local.settingsUpdatedAt ?? "") : remote.settingsUpdatedAt,
     highlights: [...byId.values()],
     deletedIds: [...deleted],
+    scolia,
+    scoliaClearedAt: clearedAt,
   };
 }
 
@@ -97,6 +120,8 @@ export const store = {
         // Ältere Speicherstände um neue Felder ergänzen
         data.deletedIds = data.deletedIds ?? [];
         data.settingsUpdatedAt = data.settingsUpdatedAt ?? "";
+        data.scolia = data.scolia ?? {};
+        data.scoliaClearedAt = data.scoliaClearedAt ?? "";
         this._cache = data;
       }
     }
@@ -117,6 +142,12 @@ export const store = {
     const data = this.load();
     data.highlights = data.highlights.filter((h) => h.id !== id);
     if (!data.deletedIds.includes(id)) data.deletedIds.push(id);
+    this.save();
+    changed();
+  },
+
+  setScoliaMetric(metric) {
+    this.load().scolia[metric.key] = metric;
     this.save();
     changed();
   },
@@ -158,7 +189,11 @@ export const store = {
   reset() {
     const data = this.load();
     const ids = data.highlights.filter((h) => !h.demo).map((h) => h.id);
-    this._cache = { ...emptyData(), deletedIds: [...data.deletedIds, ...ids] };
+    this._cache = {
+      ...emptyData(),
+      deletedIds: [...data.deletedIds, ...ids],
+      scoliaClearedAt: new Date().toISOString(),
+    };
     this.save();
     changed();
   },

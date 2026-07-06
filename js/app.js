@@ -1,6 +1,7 @@
 import { store, TYPES, SOURCES, newId } from "./store.js";
 import { auth } from "./auth.js";
 import { sync } from "./sync.js";
+import { importScoliaFiles, scoliaYearValue } from "./scolia.js";
 
 const view = document.getElementById("view");
 const state = { year: null, filter: "alle" };
@@ -74,6 +75,54 @@ function syncInfoText() {
   return "Noch nicht synchronisiert.";
 }
 
+// Scolia-Sektion der Übersicht: Jahreswerte + Monats-Balkendiagramm
+function scoliaSection(data, year) {
+  const metrics = Object.values(data.scolia ?? {});
+  if (!metrics.length) return "";
+
+  const cards = metrics
+    .map((m) => ({ metric: m, value: scoliaYearValue(m, year) }))
+    .filter((c) => c.value !== null)
+    .map(
+      (c) => `
+      <div class="stat">
+        <div class="stat-num green">${c.value}</div>
+        <div class="stat-label">${esc(c.metric.label)}</div>
+      </div>`
+    )
+    .join("");
+
+  const monthly = metrics.find((m) => m.granularity === "monthly");
+  return `
+    <h2>Aus Scolia</h2>
+    ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Für ${esc(year)} sind keine Scolia-Werte importiert.</div>`}
+    ${monthly ? barChart(monthly, year) : ""}
+  `;
+}
+
+function barChart(metric, year) {
+  const monate = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+  const werte = monate.map((_, i) => metric.values[`${year}-${String(i + 1).padStart(2, "0")}`] ?? 0);
+  if (!werte.some((v) => v > 0)) return "";
+  const max = Math.max(...werte);
+  return `
+    <div class="panel bar-chart">
+      <div class="bars">
+        ${werte
+          .map(
+            (v, i) => `
+          <div class="bar-col">
+            <div class="bar-value">${v || ""}</div>
+            <div class="bar" style="height:${Math.max(Math.round((v / max) * 100), v > 0 ? 3 : 0)}%"></div>
+            <div class="bar-label">${monate[i]}</div>
+          </div>`
+          )
+          .join("")}
+      </div>
+      <div class="hl-sub" style="margin-top:10px;">${esc(metric.label)} pro Monat ${esc(year)}</div>
+    </div>`;
+}
+
 // ---------- Übersicht ----------
 
 function renderDashboard(root) {
@@ -108,6 +157,7 @@ function renderDashboard(root) {
       <div class="stat"><div class="stat-num">${shortlegs.length}</div><div class="stat-label">Short Legs</div></div>
       <div class="stat"><div class="stat-num">${bestLeg ? bestLeg : "–"}</div><div class="stat-label">Bestes Leg (Darts)</div></div>
     </div>
+    ${scoliaSection(data, state.year)}
     <h2>Letzte Highlights</h2>
     ${
       latest.length
@@ -265,24 +315,40 @@ function renderErfassen(root) {
 // ---------- Quellen ----------
 
 function renderQuellen(root) {
+  const scoliaMetrics = Object.values(store.load().scolia ?? {});
+  const scoliaActive = scoliaMetrics.length > 0;
+
   const sources = [
     {
       name: "Scolia",
-      desc: "Kamera-basiertes Auto-Scoring an deinem Steeldart-Board. Geplant: automatischer Import deiner Spiele und Highlights über dein Scolia-Konto.",
+      status: scoliaActive ? `CSV-Import aktiv (${scoliaMetrics.length} Statistik${scoliaMetrics.length > 1 ? "en" : ""})` : "Noch nicht verbunden",
+      ok: scoliaActive,
+      desc: "Kamera-basiertes Auto-Scoring an deinem Steeldart-Board. Exportiere im Scolia Web Client (Statistiken) die Diagramme als CSV und lies sie hier ein.",
+      actions: `
+        <div class="settings-row">
+          <button class="btn" id="btn-scolia-import">📄 Scolia-CSV importieren</button>
+          <input type="file" id="scolia-file" accept=".csv,text/csv" multiple hidden>
+        </div>`,
     },
     {
       name: "GoDartsPro",
+      status: "Noch nicht verbunden",
+      ok: false,
       desc: "Online-Trainingsplattform mit Übungen und Auswertungen. Geplant: Übernahme deiner Trainingsergebnisse.",
+      actions: "",
     },
     {
       name: "Russ Bray Darts Scorer",
+      status: "Noch nicht verbunden",
+      ok: false,
       desc: "Scoring-App auf deinem iPad. Geplant: Import deiner Spielstatistiken per Datei-Export.",
+      actions: "",
     },
   ];
 
   root.innerHTML = `
     <h1>Quellen</h1>
-    <p class="page-sub">Hier laufen später alle deine Dart-Plattformen zusammen.</p>
+    <p class="page-sub">Hier laufen alle deine Dart-Plattformen zusammen.</p>
     <div class="source-grid">
       ${sources
         .map(
@@ -290,19 +356,33 @@ function renderQuellen(root) {
         <div class="panel source-card">
           <div class="source-head">
             <span class="source-name">${s.name}</span>
-            <span class="status">Noch nicht verbunden</span>
+            <span class="status ${s.ok ? "ok" : ""}">${s.status}</span>
           </div>
           <div class="source-desc">${s.desc}</div>
+          ${s.actions}
         </div>`
         )
         .join("")}
     </div>
     <div class="hint">
-      💡 Bis die Schnittstellen eingerichtet sind, kannst du deine Highlights unter
-      <a href="#/erfassen">Erfassen</a> manuell eintragen – die Quelle wird dabei mitgespeichert,
-      sodass später alles sauber zusammenläuft.
+      💡 Einzelne Highlights (z. B. einen 180er vom Ligaspiel) kannst du jederzeit unter
+      <a href="#/erfassen">Erfassen</a> manuell eintragen – die Quelle wird mitgespeichert.
     </div>
   `;
+
+  const fileInput = root.querySelector("#scolia-file");
+  root.querySelector("#btn-scolia-import").addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    if (!fileInput.files.length) return;
+    try {
+      const imported = await importScoliaFiles(fileInput.files);
+      toast(`Importiert: ${imported.map((m) => m.label).join(", ")} ✅`);
+      renderQuellen(root);
+    } catch (e) {
+      toast("Import fehlgeschlagen: " + (e.message || "unbekannter Fehler"));
+    }
+    fileInput.value = "";
+  });
 }
 
 // ---------- Mehr / Einstellungen ----------

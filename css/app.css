@@ -278,6 +278,40 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   margin-top: 16px;
 }
 
+.status.ok { background: rgba(47, 191, 113, 0.14); color: var(--green); }
+
+/* ---------- Balkendiagramm ---------- */
+
+.bar-chart { margin-top: 12px; }
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 150px;
+}
+
+.bar-col {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.bar {
+  width: 100%;
+  max-width: 36px;
+  background: var(--green);
+  border-radius: 4px 4px 0 0;
+}
+
+.bar-value { font-size: 11px; color: var(--muted); }
+.bar-label { font-size: 11px; color: var(--muted); }
+
 .settings-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 
@@ -328,6 +362,9 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   .brand-sub { display: none; }
   .sync-status { display: none; }
   .sync-banner { flex-direction: column; text-align: center; }
+  .bar-value { display: none; }
+  .bar-label { font-size: 9px; }
+  .bars { gap: 3px; height: 110px; }
 
   .nav {
     position: fixed;
