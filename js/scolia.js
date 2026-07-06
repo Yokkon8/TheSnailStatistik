@@ -6,13 +6,19 @@ import { store } from "./store.js";
 
 const METRIC_LABELS = {
   x01_games: "X01-Spiele",
+  x01_darts: "Würfe",
+  x01_180s: "180er",
+  x01_average: "3-Dart-Schnitt",
+  x01_scoring: "Scoring",
+  x01_first9_average: "Erster-9-Schnitt",
+  x01_checkout_rate: "Checkout-Rate",
   "180s": "180er",
   "171s": "171+",
   "140s": "140+",
   best_leg: "Bestes Leg",
-  average: "3-Dart-Average",
-  first9_average: "First-9-Average",
-  checkout_rate: "Checkout-Quote",
+  average: "3-Dart-Schnitt",
+  first9_average: "Erster-9-Schnitt",
+  checkout_rate: "Checkout-Rate",
 };
 
 function prettify(key) {
@@ -67,7 +73,8 @@ export function scoliaYearValue(metric, year) {
     .map(([, v]) => v);
   if (!vals.length) return null;
   if (metric.key.includes("best")) return Math.min(...vals);
-  if (metric.key.includes("average") || metric.key.includes("rate")) {
+  // Durchschnitts- und Quoten-Diagramme: Mittelwert statt Summe
+  if (/average|avg|rate|scoring|schnitt/.test(metric.key)) {
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   }
   return vals.reduce((a, b) => a + b, 0);
