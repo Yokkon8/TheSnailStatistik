@@ -212,6 +212,18 @@ input, select, button {
   color: var(--text);
 }
 
+textarea {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  width: 100%;
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+  margin-top: 10px;
+}
+
 input[type="text"], input[type="number"], input[type="date"], select {
   background: var(--panel-2);
   border: 1px solid var(--border);

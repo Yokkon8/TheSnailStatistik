@@ -10,6 +10,7 @@ import {
   monthDailyValues,
   scoliaHighlightEvents,
 } from "./scolia.js";
+import { importDreikStats, dreikShortLegs, dreikBestesLeg } from "./dreik.js";
 
 const view = document.getElementById("view");
 const state = {
@@ -251,6 +252,36 @@ function barChart(metric, info) {
     </div>`;
 }
 
+// 3K-Darts-Bilanz: Gesamtwerte ohne Datum – nur in der Ansicht "Alle Jahre"
+function dreikSection(data, info) {
+  const d = data.dreik;
+  if (!d || info.mode !== "jahre") return "";
+  const quote = d.spiele ? Math.round((d.siege / d.spiele) * 1000) / 10 : null;
+  const shortLegs = dreikShortLegs(d);
+  const bestesLeg = dreikBestesLeg(d);
+  const karte = (wert, label) =>
+    wert === null || wert === undefined
+      ? ""
+      : `<div class="stat"><div class="stat-num blue">${fmtNum(wert)}</div><div class="stat-label">${label}</div></div>`;
+  return `
+    <h2>Turnier-Bilanz <span class="h2-sub">aus 3K Darts · alle Zeiten</span></h2>
+    <div class="stat-grid">
+      ${karte(d.spiele, "Spiele")}
+      ${quote !== null ? `<div class="stat"><div class="stat-num blue">${fmtNum(quote)}&thinsp;%</div><div class="stat-label">Siegquote</div></div>` : ""}
+      ${karte(d.average, "3-Dart-Schnitt")}
+      ${karte(d.s180, "180er")}
+      ${karte(shortLegs, "Short Legs")}
+      ${karte(bestesLeg, "Bestes Leg (Darts)")}
+      ${karte(d.maxCheckout, "Höchstes Finish")}
+      ${karte(d.co100, "100+ Finishes")}
+    </div>
+    <div class="hl-sub" style="margin-top:8px;">
+      Die 3K-App liefert nur Gesamtwerte ohne Datum – diese Bilanz erscheint deshalb nur bei „Alle Jahre"
+      und fließt nicht in die Highlight-Karten oben ein.
+    </div>
+  `;
+}
+
 // ---------- Übersicht ----------
 
 function renderDashboard(root) {
@@ -308,6 +339,7 @@ function renderDashboard(root) {
     </div>
     ${hatScoliaAnteil ? `<div class="hl-sub" style="margin-top:8px;">Zusammengefasst aus manueller Erfassung und Scolia-Import.</div>` : ""}
     ${scoliaSection(data, info)}
+    ${dreikSection(data, info)}
     <h2>Letzte Highlights</h2>
     ${
       latest.length
@@ -573,10 +605,19 @@ function renderQuellen(root) {
     },
     {
       name: "3K Darts",
-      status: "Kein Export verfügbar",
-      ok: false,
-      desc: "Turnier-App von 2K Dartsoftware (Turniere, Live-Ticker, Ranglisten). Bietet für Spieler aktuell keinen Daten-Export – Turnier-Highlights trägst du unter Erfassen mit Quelle „3K Darts“ ein.",
-      actions: "",
+      status: store.load().dreik ? "Bilanz importiert" : "Noch nicht verbunden",
+      ok: !!store.load().dreik,
+      desc: "Turnier-App von 2K Dartsoftware. Kopiere in der App deine persönliche Statistik („Alle“) als Text und füge sie hier ein – einzelne Turnier-Highlights trägst du weiter unter Erfassen ein.",
+      actions: `
+        <div class="settings-row">
+          <button class="btn" id="btn-dreik-toggle">📋 Statistik einfügen</button>
+        </div>
+        <div id="dreik-wrap" hidden>
+          <textarea id="dreik-text" rows="6" placeholder="Kopierten Statistik-Text aus 3K Darts hier einfügen …"></textarea>
+          <div class="settings-row" style="margin-top:8px;">
+            <button class="btn primary" id="btn-dreik-parse">Einlesen</button>
+          </div>
+        </div>`,
     },
   ];
 
@@ -603,6 +644,21 @@ function renderQuellen(root) {
       <a href="#/erfassen">Erfassen</a> manuell eintragen – die Quelle wird mitgespeichert.
     </div>
   `;
+
+  root.querySelector("#btn-dreik-toggle").addEventListener("click", () => {
+    const wrap = root.querySelector("#dreik-wrap");
+    wrap.hidden = !wrap.hidden;
+    if (!wrap.hidden) root.querySelector("#dreik-text").focus();
+  });
+  root.querySelector("#btn-dreik-parse").addEventListener("click", () => {
+    try {
+      const stats = importDreikStats(root.querySelector("#dreik-text").value);
+      toast(`3K-Bilanz eingelesen: ${fmtNum(stats.spiele ?? 0)} Spiele, ${fmtNum(stats.s180 ?? 0)} × 180er ✅`);
+      renderQuellen(root);
+    } catch (e) {
+      toast(e.message || "Einlesen fehlgeschlagen");
+    }
+  });
 
   const fileInput = root.querySelector("#scolia-file");
   root.querySelector("#btn-scolia-import").addEventListener("click", () => fileInput.click());

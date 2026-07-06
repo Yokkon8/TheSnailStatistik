@@ -1,5 +1,5 @@
 // Service Worker: macht die App offline-fähig und installierbar.
-const CACHE = "thesnail-v4";
+const CACHE = "thesnail-v5";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const ASSETS = [
   "./js/auth.js",
   "./js/sync.js",
   "./js/scolia.js",
+  "./js/dreik.js",
   "./js/vendor/msal-browser.min.js",
   "./manifest.webmanifest",
   "./icons/favicon.png",

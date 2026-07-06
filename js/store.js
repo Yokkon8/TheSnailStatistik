@@ -60,6 +60,7 @@ function emptyData() {
     deletedIds: [],
     scolia: {},
     scoliaClearedAt: "",
+    dreik: null,
   };
 }
 
@@ -87,6 +88,13 @@ export function mergeData(local, remote) {
     }
   }
 
+  // 3K-Bilanz: der neuere Import gewinnt
+  let dreik = null;
+  for (const kandidat of [remote.dreik, local.dreik]) {
+    if (!kandidat || (kandidat.importedAt ?? "") <= clearedAt) continue;
+    if (!dreik || (kandidat.importedAt ?? "") > (dreik.importedAt ?? "")) dreik = kandidat;
+  }
+
   return {
     settings: (localNewer ? local.settings : remote.settings) ?? { name: "" },
     settingsUpdatedAt: localNewer ? (local.settingsUpdatedAt ?? "") : remote.settingsUpdatedAt,
@@ -94,6 +102,7 @@ export function mergeData(local, remote) {
     deletedIds: [...deleted],
     scolia,
     scoliaClearedAt: clearedAt,
+    dreik,
   };
 }
 
@@ -123,6 +132,7 @@ export const store = {
         data.settingsUpdatedAt = data.settingsUpdatedAt ?? "";
         data.scolia = data.scolia ?? {};
         data.scoliaClearedAt = data.scoliaClearedAt ?? "";
+        data.dreik = data.dreik ?? null;
         this._cache = data;
       }
     }
@@ -157,6 +167,12 @@ export const store = {
 
   setScoliaMetric(metric) {
     this.load().scolia[metric.key] = metric;
+    this.save();
+    changed();
+  },
+
+  setDreik(stats) {
+    this.load().dreik = stats;
     this.save();
     changed();
   },
