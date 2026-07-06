@@ -17,6 +17,13 @@ Eine **PWA (Progressive Web App)** – eine echte, installierbare App ohne App-S
   ohne Abhängigkeiten (bewusst so gewählt, u. a. weil der Ordner auf
   SharePoint/OneDrive synchronisiert wird).
 
+## Die App im Internet
+
+**https://yokkon8.github.io/TheSnailStatistik/**
+
+Gehostet über GitHub Pages (Repository `Yokkon8/TheSnailStatistik`, Branch `main`).
+Jeder Push auf `main` veröffentlicht automatisch die neue Version.
+
 ## Lokal starten (am PC)
 
 Rechtsklick auf `tools\serve.ps1` → „Mit PowerShell ausführen", oder im Terminal:
@@ -60,8 +67,9 @@ Ein Highlight-Eintrag:
 ## Roadmap
 
 1. ✅ Grundgerüst: Übersicht, Highlights-Liste, manuelle Erfassung, Export/Import
-2. ⬜ Hosting (z. B. GitHub Pages, kostenlos), damit iPhone/iPad die App laden können
-3. ⬜ Automatische Synchronisation zwischen Geräten (Cloud-Datenbank)
+2. ✅ Hosting über GitHub Pages: <https://yokkon8.github.io/TheSnailStatistik/>
+3. ⬜ Automatische Synchronisation zwischen Geräten: App-Registrierung in
+   Microsoft 365, Anmeldung per Microsoft-Konto, Daten in SharePoint (Microsoft Graph)
 4. ⬜ Schnittstellen: **Scolia** (Auto-Scoring-Kamera), **GoDartsPro**
    (Trainingsplattform), **Russ Bray Darts Scorer** (iPad-App)
 5. ⬜ Adressen/Kontakte hinterlegen (Vereine, Spielorte, Mitspieler)
