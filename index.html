@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Snail – Dart-Statistik</title>
+  <meta name="description" content="Persönliche Dart-Statistik: 180er, High Finishes, Short Legs und mehr – alle Quellen an einem Ort.">
+  <meta name="theme-color" content="#0d1117">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="The Snail">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">🎯</span>
+        <div>
+          <div class="brand-name">The Snail</div>
+          <div class="brand-sub">Dart-Statistik</div>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Hauptnavigation">
+        <a href="#/"><span class="ni" aria-hidden="true">📊</span><span class="nl">Übersicht</span></a>
+        <a href="#/highlights"><span class="ni" aria-hidden="true">🏆</span><span class="nl">Highlights</span></a>
+        <a href="#/erfassen"><span class="ni" aria-hidden="true">➕</span><span class="nl">Erfassen</span></a>
+        <a href="#/quellen"><span class="ni" aria-hidden="true">🔗</span><span class="nl">Quellen</span></a>
+        <a href="#/einstellungen"><span class="ni" aria-hidden="true">⚙️</span><span class="nl">Mehr</span></a>
+      </nav>
+    </aside>
+    <main id="view" class="content"></main>
+  </div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      addEventListener("load", () => navigator.serviceWorker.register("./sw.js"));
+    }
+  </script>
+</body>
+</html>
