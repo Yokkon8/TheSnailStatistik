@@ -1,28 +1,34 @@
 // Import von Scolia-CSV-Exporten. Scolia exportiert pro Statistik-Diagramm
-// eine Datei wie "x01_games_monthly_from_2023-01-01_to_2026-07-01.csv" mit
-// Zeilen im Format: "2023-01-01T00:00:00.000Z";"13"
+// eine Datei wie "x01_games_daily_from_2023-01-29_to_2026-07-06.csv" mit
+// Zeilen im Format: "2023-01-29T00:00:00.000Z";"13"
+// Tägliche Exporte enthalten für spielfreie Tage eine 0 – bei Durchschnitts-
+// werten werden diese Tage ignoriert, sonst würden sie den Schnitt verfälschen.
 
 import { store } from "./store.js";
 
 const METRIC_LABELS = {
   x01_games: "X01-Spiele",
-  x01_darts: "Würfe",
+  x01_throws: "Würfe",
   x01_180s: "180er",
-  x01_average: "3-Dart-Schnitt",
+  "x01_3-dart_average": "3-Dart-Schnitt",
   x01_scoring: "Scoring",
-  x01_first9_average: "Erster-9-Schnitt",
+  "x01_first_9 average": "Erster-9-Schnitt",
   x01_checkout_rate: "Checkout-Rate",
+  // ältere/abweichende Benennungen
   "180s": "180er",
-  "171s": "171+",
-  "140s": "140+",
-  best_leg: "Bestes Leg",
   average: "3-Dart-Schnitt",
   first9_average: "Erster-9-Schnitt",
   checkout_rate: "Checkout-Rate",
+  best_leg: "Bestes Leg",
 };
 
 function prettify(key) {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+// Durchschnitts- und Quoten-Diagramme: Mittelwert statt Summe
+export function isMeanMetric(metric) {
+  return /average|avg|rate|scoring|schnitt/.test(metric.key);
 }
 
 export function parseScoliaCsv(filename, text) {
@@ -41,7 +47,7 @@ export function parseScoliaCsv(filename, text) {
     const num = Number(valueRaw.replace(",", "."));
     if (!Number.isFinite(num)) continue;
     const dateKey = granularity === "monthly" ? dateRaw.slice(0, 7) : dateRaw.slice(0, 10);
-    values[dateKey] = num;
+    values[dateKey] = Math.round(num * 100) / 100;
     count++;
   }
   if (!count) throw new Error(`„${filename}" enthält keine lesbaren Datenzeilen`);
@@ -66,16 +72,38 @@ export async function importScoliaFiles(fileList) {
 }
 
 // Jahreswert einer Metrik: Summe – außer bei "best" (Minimum) und
-// Durchschnitts-/Quotenwerten (Mittelwert).
+// Durchschnitts-/Quotenwerten (Mittelwert ohne spielfreie Tage).
 export function scoliaYearValue(metric, year) {
-  const vals = Object.entries(metric.values)
+  let vals = Object.entries(metric.values)
     .filter(([k]) => k.startsWith(year))
     .map(([, v]) => v);
   if (!vals.length) return null;
-  if (metric.key.includes("best")) return Math.min(...vals);
-  // Durchschnitts- und Quoten-Diagramme: Mittelwert statt Summe
-  if (/average|avg|rate|scoring|schnitt/.test(metric.key)) {
+  if (metric.key.includes("best")) {
+    vals = vals.filter((v) => v > 0);
+    return vals.length ? Math.min(...vals) : null;
+  }
+  if (isMeanMetric(metric)) {
+    vals = vals.filter((v) => v > 0);
+    if (!vals.length) return null;
     return Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10;
   }
   return vals.reduce((a, b) => a + b, 0);
+}
+
+// Monatswerte fürs Balkendiagramm – tägliche Daten werden zu Monaten gebündelt
+export function monthlyValues(metric, year) {
+  const buckets = Array.from({ length: 12 }, () => []);
+  for (const [k, v] of Object.entries(metric.values)) {
+    if (!k.startsWith(year)) continue;
+    buckets[Number(k.slice(5, 7)) - 1].push(v);
+  }
+  return buckets.map((vals) => {
+    if (!vals.length) return 0;
+    if (isMeanMetric(metric)) {
+      const gespielt = vals.filter((v) => v > 0);
+      if (!gespielt.length) return 0;
+      return Math.round((gespielt.reduce((a, b) => a + b, 0) / gespielt.length) * 10) / 10;
+    }
+    return vals.reduce((a, b) => a + b, 0);
+  });
 }

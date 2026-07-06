@@ -1,7 +1,7 @@
 import { store, TYPES, SOURCES, newId } from "./store.js";
 import { auth } from "./auth.js";
 import { sync } from "./sync.js";
-import { importScoliaFiles, scoliaYearValue } from "./scolia.js";
+import { importScoliaFiles, scoliaYearValue, monthlyValues } from "./scolia.js";
 
 const view = document.getElementById("view");
 const state = { year: null, filter: "alle" };
@@ -12,6 +12,10 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
+}
+
+function fmtNum(n) {
+  return n.toLocaleString("de-DE");
 }
 
 function fmtDate(iso) {
@@ -86,23 +90,23 @@ function scoliaSection(data, year) {
     .map(
       (c) => `
       <div class="stat">
-        <div class="stat-num green">${c.value}</div>
+        <div class="stat-num green">${fmtNum(c.value)}${c.metric.key.includes("rate") ? "&thinsp;%" : ""}</div>
         <div class="stat-label">${esc(c.metric.label)}</div>
       </div>`
     )
     .join("");
 
-  const monthly = metrics.find((m) => m.granularity === "monthly");
+  const chartMetric = (data.scolia ?? {}).x01_games ?? metrics[0];
   return `
     <h2>Aus Scolia</h2>
     ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Für ${esc(year)} sind keine Scolia-Werte importiert.</div>`}
-    ${monthly ? barChart(monthly, year) : ""}
+    ${chartMetric ? barChart(chartMetric, year) : ""}
   `;
 }
 
 function barChart(metric, year) {
   const monate = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
-  const werte = monate.map((_, i) => metric.values[`${year}-${String(i + 1).padStart(2, "0")}`] ?? 0);
+  const werte = monthlyValues(metric, year);
   if (!werte.some((v) => v > 0)) return "";
   const max = Math.max(...werte);
   return `
@@ -112,7 +116,7 @@ function barChart(metric, year) {
           .map(
             (v, i) => `
           <div class="bar-col">
-            <div class="bar-value">${v || ""}</div>
+            <div class="bar-value">${v ? fmtNum(v) : ""}</div>
             <div class="bar" style="height:${Math.max(Math.round((v / max) * 100), v > 0 ? 3 : 0)}%"></div>
             <div class="bar-label">${monate[i]}</div>
           </div>`
