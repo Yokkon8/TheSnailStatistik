@@ -1,3 +1,7 @@
 # Lokale Arbeitsdateien – gehören nicht ins öffentliche Repository
 .claude/
 CLAUDE.md
+
+# Logo-Originaldateien bleiben privat – die App nutzt die verkleinerten
+# Versionen aus icons/ und images/
+TheSnailLogo/
