@@ -236,7 +236,6 @@ function renderDashboard(root) {
     <div class="stat-grid">
       <div class="stat"><div class="stat-num gold">${fmtNum(count("180"))}</div><div class="stat-label">180er</div></div>
       <div class="stat"><div class="stat-num red">${count("171")}</div><div class="stat-label">171+</div></div>
-      <div class="stat"><div class="stat-num blue">${count("140")}</div><div class="stat-label">140+</div></div>
       <div class="stat"><div class="stat-num green">${count("highfinish")}</div><div class="stat-label">High Finishes</div></div>
       <div class="stat"><div class="stat-num">${count("shortleg")}</div><div class="stat-label">Short Legs</div></div>
       <div class="stat"><div class="stat-num">${bestLeg ? bestLeg : "–"}</div><div class="stat-label">Bestes Leg (Darts)</div></div>
@@ -279,7 +278,6 @@ function renderHighlights(root) {
     ["alle", "Alle"],
     ["180", "180er"],
     ["171", "171+"],
-    ["140", "140+"],
     ["highfinish", "High Finish"],
     ["shortleg", "Short Legs"],
   ];
@@ -337,7 +335,6 @@ function renderErfassen(root) {
         <select name="type" id="type-select">
           <option value="180">180er</option>
           <option value="171">171+</option>
-          <option value="140">140+</option>
           <option value="highfinish">High Finish (Checkout ab 100)</option>
           <option value="shortleg">Short Leg (11- bis 20-Darter)</option>
         </select>
