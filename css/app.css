@@ -123,9 +123,11 @@ h2 { font-size: 18px; margin: 28px 0 12px; }
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
   gap: 12px;
 }
+
+.h2-sub { font-size: 13px; font-weight: 400; color: var(--muted); }
 
 .stat {
   background: var(--panel);

@@ -8,6 +8,7 @@ import {
   yearlyValues,
   rollingMonthlyValues,
   lastDailyValues,
+  scoliaHighlightEvents,
 } from "./scolia.js";
 
 const view = document.getElementById("view");
@@ -53,15 +54,33 @@ function toast(msg) {
 }
 
 function highlightRow(h, withDelete) {
+  const anzahl = h.count ?? 1;
+  const titel = h.note
+    ? esc(h.note)
+    : anzahl > 1
+      ? `${anzahl} × ${esc(TYPES[h.type] ?? "")}`
+      : esc(TYPES[h.type] ?? "");
   return `
     <li class="hl-row">
       <span class="badge t-${esc(h.type)}">${esc(typeLabel(h))}</span>
       <div class="hl-main">
-        <div class="hl-title">${esc(h.note) || esc(TYPES[h.type] ?? "")}</div>
-        <div class="hl-sub">${fmtDate(h.date)} &middot; ${esc(SOURCES[h.source] ?? h.source)}</div>
+        <div class="hl-title">${titel}</div>
+        <div class="hl-sub">${fmtDate(h.date)} &middot; ${esc(SOURCES[h.source] ?? h.source)}${h.virtual ? " (Import)" : ""}</div>
       </div>
-      ${withDelete ? `<button class="icon-btn" data-del="${esc(h.id)}" title="Eintrag löschen">✕</button>` : ""}
+      ${withDelete && !h.virtual ? `<button class="icon-btn" data-del="${esc(h.id)}" title="Eintrag löschen">✕</button>` : ""}
     </li>`;
+}
+
+// Manuelle Highlights + aus Scolia abgeleitete Ereignisse, ohne Doppelzählung:
+// manuelle Einträge mit Quelle Scolia entfallen, wenn derselbe Typ bereits
+// automatisch aus dem Scolia-Import kommt.
+function combinedEvents(data, prefix) {
+  const virtual = scoliaHighlightEvents(data.scolia).filter((e) => e.date.startsWith(prefix));
+  const importedTypes = new Set(virtual.map((e) => e.type));
+  const manual = data.highlights.filter(
+    (h) => h.date.startsWith(prefix) && !(h.source === "scolia" && importedTypes.has(h.type))
+  );
+  return [...manual, ...virtual];
 }
 
 // Hinweis-Banner zur Anmeldung, solange noch kein Microsoft-Konto verbunden ist
@@ -92,7 +111,10 @@ function scoliaSection(data, prefix, isGesamt) {
   const metrics = Object.values(data.scolia ?? {});
   if (!metrics.length) return "";
 
+  // 180er und Best Legs stecken schon in den Highlight-Karten oben –
+  // hier nur die reinen Spielstatistiken zeigen.
   const cards = metrics
+    .filter((m) => !m.key.includes("180") && !m.key.includes("best"))
     .map((m) => ({ metric: m, value: scoliaYearValue(m, prefix) }))
     .filter((c) => c.value !== null)
     .map(
@@ -113,7 +135,7 @@ function scoliaSection(data, prefix, isGesamt) {
   if (state.chartView === "tage" && chartMetric.granularity !== "daily") state.chartView = "monate";
 
   return `
-    <h2>Aus Scolia</h2>
+    <h2>Spielstatistik <span class="h2-sub">aus Scolia</span></h2>
     ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Für ${isGesamt ? "diesen Zeitraum" : esc(prefix)} sind keine Scolia-Werte importiert.</div>`}
     <div class="toolbar" style="margin:16px 0 0;">
       <select id="chart-metric" class="year-select">
@@ -193,11 +215,12 @@ function renderDashboard(root) {
   const isGesamt = state.year === "gesamt";
   const prefix = isGesamt ? "" : state.year; // startsWith("") trifft alles
 
-  const hs = data.highlights.filter((h) => h.date.startsWith(prefix));
-  const count = (type) => hs.filter((h) => h.type === type).length;
-  const shortlegs = hs.filter((h) => h.type === "shortleg");
+  const events = combinedEvents(data, prefix);
+  const count = (type) => events.filter((e) => e.type === type).reduce((s, e) => s + (e.count ?? 1), 0);
+  const shortlegs = events.filter((e) => e.type === "shortleg");
   const bestLeg = shortlegs.length ? Math.min(...shortlegs.map((h) => h.value)) : null;
-  const latest = sortedHighlights(hs).slice(0, 5);
+  const latest = sortedHighlights(events).slice(0, 5);
+  const hatScoliaAnteil = events.some((e) => e.virtual);
 
   root.innerHTML = `
     <h1>Übersicht</h1>
@@ -211,13 +234,14 @@ function renderDashboard(root) {
       </select>
     </div>
     <div class="stat-grid">
-      <div class="stat"><div class="stat-num gold">${count("180")}</div><div class="stat-label">180er</div></div>
+      <div class="stat"><div class="stat-num gold">${fmtNum(count("180"))}</div><div class="stat-label">180er</div></div>
       <div class="stat"><div class="stat-num red">${count("171")}</div><div class="stat-label">171+</div></div>
       <div class="stat"><div class="stat-num blue">${count("140")}</div><div class="stat-label">140+</div></div>
       <div class="stat"><div class="stat-num green">${count("highfinish")}</div><div class="stat-label">High Finishes</div></div>
-      <div class="stat"><div class="stat-num">${shortlegs.length}</div><div class="stat-label">Short Legs</div></div>
+      <div class="stat"><div class="stat-num">${count("shortleg")}</div><div class="stat-label">Short Legs</div></div>
       <div class="stat"><div class="stat-num">${bestLeg ? bestLeg : "–"}</div><div class="stat-label">Bestes Leg (Darts)</div></div>
     </div>
+    ${hatScoliaAnteil ? `<div class="hl-sub" style="margin-top:8px;">Zusammengefasst aus manueller Erfassung und Scolia-Import.</div>` : ""}
     ${scoliaSection(data, prefix, isGesamt)}
     <h2>Letzte Highlights</h2>
     ${
@@ -259,15 +283,14 @@ function renderHighlights(root) {
     ["highfinish", "High Finish"],
     ["shortleg", "Short Legs"],
   ];
+  const events = combinedEvents(data, "");
   const list = sortedHighlights(
-    state.filter === "alle"
-      ? data.highlights
-      : data.highlights.filter((h) => h.type === state.filter)
+    state.filter === "alle" ? events : events.filter((h) => h.type === state.filter)
   );
 
   root.innerHTML = `
     <h1>Highlights</h1>
-    <p class="page-sub">Alle erfassten Highlights, neueste zuerst.</p>
+    <p class="page-sub">Alle Highlights – manuell erfasst und aus dem Scolia-Import, neueste zuerst.</p>
     <div class="chip-row">
       ${filters
         .map(

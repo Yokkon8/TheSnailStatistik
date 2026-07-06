@@ -71,6 +71,29 @@ export async function importScoliaFiles(fileList) {
   return imported;
 }
 
+// Erzeugt Highlight-Einträge aus täglichen Scolia-Daten: Tage mit 180ern
+// und – falls ein Best-Leg-Export vorhanden ist – Short Legs (≤ 20 Darts).
+export function scoliaHighlightEvents(scoliaMap) {
+  const events = [];
+  for (const metric of Object.values(scoliaMap ?? {})) {
+    if (metric.granularity !== "daily") continue;
+    if (metric.key.includes("180")) {
+      for (const [date, v] of Object.entries(metric.values)) {
+        if (v > 0) {
+          events.push({ id: `scolia-180-${date}`, type: "180", value: null, count: v, date, source: "scolia", virtual: true });
+        }
+      }
+    } else if (metric.key.includes("best")) {
+      for (const [date, v] of Object.entries(metric.values)) {
+        if (v >= 9 && v <= 20) {
+          events.push({ id: `scolia-shortleg-${date}`, type: "shortleg", value: v, count: 1, date, source: "scolia", virtual: true });
+        }
+      }
+    }
+  }
+  return events;
+}
+
 // Jahreswert einer Metrik: Summe – außer bei "best" (Minimum) und
 // Durchschnitts-/Quotenwerten (Mittelwert ohne spielfreie Tage).
 export function scoliaYearValue(metric, year) {
