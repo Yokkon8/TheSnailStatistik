@@ -139,6 +139,14 @@ export const store = {
     changed();
   },
 
+  update(id, changes) {
+    const eintrag = this.load().highlights.find((h) => h.id === id);
+    if (!eintrag) return;
+    Object.assign(eintrag, changes);
+    this.save();
+    changed();
+  },
+
   remove(id) {
     const data = this.load();
     data.highlights = data.highlights.filter((h) => h.id !== id);

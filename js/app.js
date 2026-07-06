@@ -12,7 +12,15 @@ import {
 } from "./scolia.js";
 
 const view = document.getElementById("view");
-const state = { year: null, month: 0, filter: "alle", chartMetric: null };
+const state = {
+  year: null,
+  month: 0,
+  filter: "alle",
+  sourceFilter: "alle",
+  hlYear: "alle",
+  chartMetric: null,
+  editId: null,
+};
 
 const MONATSNAMEN = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
@@ -105,7 +113,12 @@ function highlightRow(h, withDelete) {
         <div class="hl-title">${titel}</div>
         <div class="hl-sub">${fmtDate(h.date)} &middot; ${esc(SOURCES[h.source] ?? h.source)}${h.virtual ? " (Import)" : ""}</div>
       </div>
-      ${withDelete && !h.virtual ? `<button class="icon-btn" data-del="${esc(h.id)}" title="Eintrag löschen">✕</button>` : ""}
+      ${
+        withDelete && !h.virtual
+          ? `<button class="icon-btn" data-edit="${esc(h.id)}" title="Eintrag bearbeiten">✏️</button>
+             <button class="icon-btn" data-del="${esc(h.id)}" title="Eintrag löschen">✕</button>`
+          : ""
+      }
     </li>`;
 }
 
@@ -336,9 +349,17 @@ function renderHighlights(root) {
     ["shortleg", "Short Legs"],
   ];
   const events = combinedEvents(data, () => true);
-  const list = sortedHighlights(
-    state.filter === "alle" ? events : events.filter((h) => h.type === state.filter)
-  );
+
+  const jahre = [...new Set(events.map((e) => e.date.slice(0, 4)))].sort().reverse();
+  if (state.hlYear !== "alle" && !jahre.includes(state.hlYear)) state.hlYear = "alle";
+
+  let list = events;
+  if (state.filter !== "alle") list = list.filter((h) => h.type === state.filter);
+  if (state.sourceFilter !== "alle") list = list.filter((h) => h.source === state.sourceFilter);
+  if (state.hlYear !== "alle") list = list.filter((h) => h.date.startsWith(state.hlYear));
+  list = sortedHighlights(list);
+
+  const quellen = [["alle", "Alle Quellen"], ...Object.entries(SOURCES)];
 
   root.innerHTML = `
     <h1>Highlights</h1>
@@ -351,10 +372,25 @@ function renderHighlights(root) {
         )
         .join("")}
     </div>
+    <div class="chip-row">
+      ${quellen
+        .map(
+          ([key, label]) =>
+            `<button class="chip ${state.sourceFilter === key ? "active" : ""}" data-source="${key}">${label}</button>`
+        )
+        .join("")}
+    </div>
+    <div class="toolbar">
+      <select id="hl-year" class="year-select">
+        <option value="alle" ${state.hlYear === "alle" ? "selected" : ""}>Alle Jahre</option>
+        ${jahre.map((j) => `<option value="${j}" ${state.hlYear === j ? "selected" : ""}>${j}</option>`).join("")}
+      </select>
+      <span class="hl-sub">${fmtNum(list.length)} ${list.length === 1 ? "Eintrag" : "Einträge"}</span>
+    </div>
     ${
       list.length
         ? `<ul class="hl-list">${list.map((h) => highlightRow(h, true)).join("")}</ul>`
-        : `<div class="panel empty">Keine Einträge für diesen Filter.</div>`
+        : `<div class="panel empty">Keine Einträge für diese Filter.</div>`
     }
   `;
 
@@ -362,6 +398,25 @@ function renderHighlights(root) {
     btn.addEventListener("click", () => {
       state.filter = btn.dataset.filter;
       renderHighlights(root);
+    })
+  );
+
+  root.querySelectorAll("[data-source]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.sourceFilter = btn.dataset.source;
+      renderHighlights(root);
+    })
+  );
+
+  root.querySelector("#hl-year").addEventListener("change", (e) => {
+    state.hlYear = e.target.value;
+    renderHighlights(root);
+  });
+
+  root.querySelectorAll("[data-edit]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.editId = btn.dataset.edit;
+      location.hash = "#/erfassen";
     })
   );
 
@@ -379,35 +434,53 @@ function renderHighlights(root) {
 // ---------- Erfassen ----------
 
 function renderErfassen(root) {
+  const editing = state.editId
+    ? store.load().highlights.find((h) => h.id === state.editId)
+    : null;
+  if (state.editId && !editing) state.editId = null;
+
   const today = new Date().toISOString().slice(0, 10);
+  const startTyp = editing?.type ?? "180";
+  const startWert = editing?.value ?? null;
 
   root.innerHTML = `
-    <h1>Highlight erfassen</h1>
-    <p class="page-sub">Trag ein neues Highlight manuell ein – bis die automatischen Schnittstellen stehen.</p>
+    <h1>${editing ? "Highlight bearbeiten" : "Highlight erfassen"}</h1>
+    <p class="page-sub">${
+      editing
+        ? "Ändere den Eintrag und speichere – die Änderung wird mitsynchronisiert."
+        : "Trag ein neues Highlight manuell ein – bis die automatischen Schnittstellen stehen."
+    }</p>
     <form id="add-form" class="form panel">
       <label class="field">Typ
         <select name="type" id="type-select">
-          <option value="180">180er</option>
-          <option value="171">171+</option>
-          <option value="highfinish">High Finish (Checkout ab 100)</option>
-          <option value="shortleg">Short Leg (11- bis 20-Darter)</option>
+          <option value="180" ${startTyp === "180" ? "selected" : ""}>180er</option>
+          <option value="171" ${startTyp === "171" ? "selected" : ""}>171+</option>
+          ${startTyp === "140" ? `<option value="140" selected>140+</option>` : ""}
+          <option value="highfinish" ${startTyp === "highfinish" ? "selected" : ""}>High Finish (Checkout ab 100)</option>
+          <option value="shortleg" ${startTyp === "shortleg" ? "selected" : ""}>Short Leg (11- bis 20-Darter)</option>
         </select>
       </label>
       <div id="value-wrap"></div>
       <label class="field">Datum
-        <input type="date" name="date" value="${today}" required>
+        <input type="date" name="date" value="${esc(editing?.date ?? today)}" required>
       </label>
       <label class="field">Quelle
         <select name="source">
           ${Object.entries(SOURCES)
-            .map(([key, label]) => `<option value="${key}" ${key === "manuell" ? "selected" : ""}>${label}</option>`)
+            .map(
+              ([key, label]) =>
+                `<option value="${key}" ${key === (editing?.source ?? "manuell") ? "selected" : ""}>${label}</option>`
+            )
             .join("")}
         </select>
       </label>
       <label class="field">Notiz (optional)
-        <input type="text" name="note" placeholder="z. B. Ligaspiel gegen …" maxlength="120">
+        <input type="text" name="note" value="${esc(editing?.note ?? "")}" placeholder="z. B. Ligaspiel gegen …" maxlength="120">
       </label>
-      <button type="submit" class="btn primary">Speichern 🎯</button>
+      <div class="settings-row">
+        <button type="submit" class="btn primary">${editing ? "Änderungen speichern ✅" : "Speichern 🎯"}</button>
+        ${editing ? `<button type="button" class="btn" id="btn-cancel-edit">Abbrechen</button>` : ""}
+      </div>
     </form>
   `;
 
@@ -422,13 +495,13 @@ function renderErfassen(root) {
       valueWrap.innerHTML = `
         <label class="field">Anzahl Darts
           <select name="value">
-            ${darts.map((d) => `<option value="${d}">${d} Darts</option>`).join("")}
+            ${darts.map((d) => `<option value="${d}" ${d === startWert ? "selected" : ""}>${d} Darts</option>`).join("")}
           </select>
         </label>`;
     } else if (t === "highfinish") {
       valueWrap.innerHTML = `
         <label class="field">Checkout (Punkte)
-          <input type="number" name="value" min="100" max="170" value="100" required>
+          <input type="number" name="value" min="100" max="170" value="${startWert ?? 100}" required>
         </label>`;
     } else {
       valueWrap.innerHTML = "";
@@ -438,20 +511,31 @@ function renderErfassen(root) {
   typeSelect.addEventListener("change", updateValueField);
   updateValueField();
 
+  root.querySelector("#btn-cancel-edit")?.addEventListener("click", () => {
+    state.editId = null;
+    location.hash = "#/highlights";
+  });
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const f = new FormData(form);
-    const type = f.get("type");
-    store.add({
-      id: newId(),
-      type,
+    const werte = {
+      type: f.get("type"),
       value: f.get("value") ? Number(f.get("value")) : null,
       date: f.get("date"),
       source: f.get("source"),
       note: (f.get("note") || "").trim(),
-    });
-    toast("Gespeichert! 🎯");
-    form.querySelector('[name="note"]').value = "";
+    };
+    if (editing) {
+      store.update(editing.id, werte);
+      state.editId = null;
+      toast("Änderungen gespeichert ✅");
+      location.hash = "#/highlights";
+    } else {
+      store.add({ id: newId(), ...werte });
+      toast("Gespeichert! 🎯");
+      form.querySelector('[name="note"]').value = "";
+    }
   });
 }
 
@@ -668,6 +752,7 @@ const routes = {
 
 function navigate() {
   const hash = location.hash.replace(/^#/, "") || "/";
+  if (hash !== "/erfassen") state.editId = null; // Bearbeiten-Modus nur auf der Erfassen-Seite
   const render = routes[hash] ?? renderDashboard;
   render(view);
   document.querySelectorAll(".nav a").forEach((a) => {
