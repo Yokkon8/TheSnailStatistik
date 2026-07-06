@@ -1,10 +1,17 @@
 import { store, TYPES, SOURCES, newId } from "./store.js";
 import { auth } from "./auth.js";
 import { sync } from "./sync.js";
-import { importScoliaFiles, scoliaYearValue, monthlyValues, yearlyValues } from "./scolia.js";
+import {
+  importScoliaFiles,
+  scoliaYearValue,
+  monthlyValues,
+  yearlyValues,
+  rollingMonthlyValues,
+  lastDailyValues,
+} from "./scolia.js";
 
 const view = document.getElementById("view");
-const state = { year: null, filter: "alle" };
+const state = { year: null, filter: "alle", chartMetric: null, chartView: null };
 
 // ---------- Hilfsfunktionen ----------
 
@@ -97,38 +104,68 @@ function scoliaSection(data, prefix, isGesamt) {
     )
     .join("");
 
-  const chartMetric = (data.scolia ?? {}).x01_games ?? metrics[0];
+  // Diagramm-Auswahl: welche Statistik, welche Zeitachse
+  if (!state.chartMetric || !data.scolia[state.chartMetric]) {
+    state.chartMetric = data.scolia.x01_games ? "x01_games" : metrics[0].key;
+  }
+  const chartMetric = data.scolia[state.chartMetric];
+  if (!state.chartView) state.chartView = isGesamt ? "jahre" : "monate";
+  if (state.chartView === "tage" && chartMetric.granularity !== "daily") state.chartView = "monate";
+
   return `
     <h2>Aus Scolia</h2>
     ${cards ? `<div class="stat-grid">${cards}</div>` : `<div class="panel empty">Für ${isGesamt ? "diesen Zeitraum" : esc(prefix)} sind keine Scolia-Werte importiert.</div>`}
-    ${chartMetric ? barChart(chartMetric, prefix, isGesamt) : ""}
+    <div class="toolbar" style="margin:16px 0 0;">
+      <select id="chart-metric" class="year-select">
+        ${metrics
+          .map((m) => `<option value="${esc(m.key)}" ${m.key === state.chartMetric ? "selected" : ""}>${esc(m.label)}</option>`)
+          .join("")}
+      </select>
+      <select id="chart-view" class="year-select">
+        <option value="jahre" ${state.chartView === "jahre" ? "selected" : ""}>Jahre</option>
+        <option value="monate" ${state.chartView === "monate" ? "selected" : ""}>Monate</option>
+        ${chartMetric.granularity === "daily" ? `<option value="tage" ${state.chartView === "tage" ? "selected" : ""}>Letzte 30 Tage</option>` : ""}
+      </select>
+    </div>
+    ${barChart(chartMetric, prefix, isGesamt, state.chartView)}
   `;
 }
 
-function barChart(metric, year, isGesamt) {
-  let labels, werte, untertitel;
-  if (isGesamt) {
-    const proJahr = yearlyValues(metric);
-    labels = proJahr.map((e) => e.year);
-    werte = proJahr.map((e) => e.value ?? 0);
-    untertitel = `${esc(metric.label)} pro Jahr`;
+function barChart(metric, prefix, isGesamt, view) {
+  let daten, untertitel;
+  if (view === "tage") {
+    daten = lastDailyValues(metric, 30) ?? [];
+    untertitel = `${esc(metric.label)} – letzte 30 Tage`;
+  } else if (view === "monate") {
+    if (isGesamt) {
+      daten = rollingMonthlyValues(metric, 12);
+      untertitel = `${esc(metric.label)} – letzte 12 Monate`;
+    } else {
+      const monate = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+      daten = monthlyValues(metric, prefix).map((v, i) => ({ label: monate[i], value: v }));
+      untertitel = `${esc(metric.label)} pro Monat ${esc(prefix)}`;
+    }
   } else {
-    labels = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
-    werte = monthlyValues(metric, year);
-    untertitel = `${esc(metric.label)} pro Monat ${esc(year)}`;
+    daten = yearlyValues(metric).map((e) => ({ label: e.year, value: e.value ?? 0 }));
+    untertitel = `${esc(metric.label)} pro Jahr`;
   }
-  if (!werte.some((v) => v > 0)) return "";
-  const max = Math.max(...werte);
+
+  if (!daten.length || !daten.some((d) => d.value > 0)) {
+    return `<div class="panel empty" style="margin-top:12px;">Keine Werte für diese Ansicht.</div>`;
+  }
+
+  const max = Math.max(...daten.map((d) => d.value));
+  const dicht = daten.length > 14; // bei vielen Balken: Werte weglassen, nur jede 5. Beschriftung
   return `
     <div class="panel bar-chart">
       <div class="bars">
-        ${werte
+        ${daten
           .map(
-            (v, i) => `
-          <div class="bar-col">
-            <div class="bar-value">${v ? fmtNum(v) : ""}</div>
-            <div class="bar" style="height:${Math.max(Math.round((v / max) * 100), v > 0 ? 3 : 0)}%"></div>
-            <div class="bar-label">${labels[i]}</div>
+            (d, i) => `
+          <div class="bar-col" title="${esc(String(d.label))}: ${fmtNum(d.value)}">
+            ${dicht ? "" : `<div class="bar-value">${d.value ? fmtNum(d.value) : ""}</div>`}
+            <div class="bar" style="height:${Math.max(Math.round((d.value / max) * 100), d.value > 0 ? 3 : 0)}%"></div>
+            <div class="bar-label">${dicht && i % 5 !== 0 ? "" : esc(String(d.label))}</div>
           </div>`
           )
           .join("")}
@@ -200,6 +237,14 @@ function renderDashboard(root) {
     renderDashboard(root);
   });
   root.querySelector("#btn-login")?.addEventListener("click", () => auth.login());
+  root.querySelector("#chart-metric")?.addEventListener("change", (e) => {
+    state.chartMetric = e.target.value;
+    renderDashboard(root);
+  });
+  root.querySelector("#chart-view")?.addEventListener("change", (e) => {
+    state.chartView = e.target.value;
+    renderDashboard(root);
+  });
 }
 
 // ---------- Highlights ----------
@@ -366,6 +411,13 @@ function renderQuellen(root) {
       status: "Noch nicht verbunden",
       ok: false,
       desc: "Scoring-App auf deinem iPad. Geplant: Import deiner Spielstatistiken per Datei-Export.",
+      actions: "",
+    },
+    {
+      name: "3K Darts",
+      status: "Kein Export verfügbar",
+      ok: false,
+      desc: "Turnier-App von 2K Dartsoftware (Turniere, Live-Ticker, Ranglisten). Bietet für Spieler aktuell keinen Daten-Export – Turnier-Highlights trägst du unter Erfassen mit Quelle „3K Darts“ ein.",
       actions: "",
     },
   ];

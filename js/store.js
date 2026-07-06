@@ -16,6 +16,7 @@ export const SOURCES = {
   scolia: "Scolia",
   godartspro: "GoDartsPro",
   russbray: "Russ Bray Scorer",
+  "3kdarts": "3K Darts",
   manuell: "Manuell",
 };
 

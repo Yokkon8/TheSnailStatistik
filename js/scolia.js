@@ -90,6 +90,51 @@ export function scoliaYearValue(metric, year) {
   return vals.reduce((a, b) => a + b, 0);
 }
 
+// Bündelt Einzelwerte: Summe – bei Durchschnitts-/Quotenwerten Mittelwert
+// ohne spielfreie Tage (Wert 0).
+function aggregate(vals, metric) {
+  if (!vals.length) return 0;
+  if (isMeanMetric(metric)) {
+    const gespielt = vals.filter((v) => v > 0);
+    if (!gespielt.length) return 0;
+    return Math.round((gespielt.reduce((a, b) => a + b, 0) / gespielt.length) * 10) / 10;
+  }
+  return vals.reduce((a, b) => a + b, 0);
+}
+
+const MONATE_KURZ = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
+
+// Letzte N Monate rollierend (für die Monats-Ansicht bei "Alle Jahre")
+export function rollingMonthlyValues(metric, count = 12) {
+  const result = [];
+  const now = new Date();
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const vals = Object.entries(metric.values)
+      .filter(([k]) => k.startsWith(key))
+      .map(([, v]) => v);
+    result.push({
+      label: `${MONATE_KURZ[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`,
+      value: aggregate(vals, metric),
+    });
+  }
+  return result;
+}
+
+// Letzte N Tage (nur für täglich exportierte Statistiken)
+export function lastDailyValues(metric, count = 30) {
+  if (metric.granularity !== "daily") return null;
+  const result = [];
+  const now = new Date();
+  for (let i = count - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    result.push({ label: `${d.getDate()}.${d.getMonth() + 1}.`, value: metric.values[key] ?? 0 });
+  }
+  return result;
+}
+
 // Jahreswerte für die Gesamt-Ansicht: ein Balken pro Jahr
 export function yearlyValues(metric) {
   const years = [...new Set(Object.keys(metric.values).map((k) => k.slice(0, 4)))].sort();
@@ -103,13 +148,5 @@ export function monthlyValues(metric, year) {
     if (!k.startsWith(year)) continue;
     buckets[Number(k.slice(5, 7)) - 1].push(v);
   }
-  return buckets.map((vals) => {
-    if (!vals.length) return 0;
-    if (isMeanMetric(metric)) {
-      const gespielt = vals.filter((v) => v > 0);
-      if (!gespielt.length) return 0;
-      return Math.round((gespielt.reduce((a, b) => a + b, 0) / gespielt.length) * 10) / 10;
-    }
-    return vals.reduce((a, b) => a + b, 0);
-  });
+  return buckets.map((vals) => aggregate(vals, metric));
 }

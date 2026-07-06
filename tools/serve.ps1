@@ -33,6 +33,7 @@ try {
       if ($full.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $full -PathType Leaf)) {
         $ext = [System.IO.Path]::GetExtension($full).ToLower()
         $ctx.Response.ContentType = if ($mime.ContainsKey($ext)) { $mime[$ext] } else { "application/octet-stream" }
+        $ctx.Response.Headers.Add("Cache-Control", "no-store")
         $bytes = [System.IO.File]::ReadAllBytes($full)
         $ctx.Response.ContentLength64 = $bytes.Length
         if (-not $isHead) { $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length) }
