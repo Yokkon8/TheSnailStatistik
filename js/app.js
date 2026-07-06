@@ -178,18 +178,27 @@ function barChart(metric, prefix, isGesamt, view) {
 
   const max = Math.max(...daten.map((d) => d.value));
   const dicht = daten.length > 14; // bei vielen Balken: Werte weglassen, nur jede 5. Beschriftung
+  const spalten = `grid-template-columns:repeat(${daten.length},1fr);`;
   return `
     <div class="panel bar-chart">
-      <div class="bars">
+      <div class="bars" style="${spalten}">
         ${daten
           .map(
-            (d, i) => `
-          <div class="bar-col" title="${esc(String(d.label))}: ${fmtNum(d.value)}">
-            ${dicht ? "" : `<div class="bar-value">${d.value ? fmtNum(d.value) : ""}</div>`}
-            <div class="bar" style="height:${Math.max(Math.round((d.value / max) * 100), d.value > 0 ? 3 : 0)}%"></div>
-            <div class="bar-label">${dicht && i % 5 !== 0 ? "" : esc(String(d.label))}</div>
+            (d) => `
+          <div class="bar-slot" title="${esc(String(d.label))}: ${fmtNum(d.value)}">
+            ${!dicht && d.value ? `<div class="bar-value">${fmtNum(d.value)}</div>` : ""}
+            ${
+              d.value > 0
+                ? `<div class="bar" style="height:${Math.max(Math.round((d.value / max) * 100), 4)}%"></div>`
+                : `<div class="bar leer"></div>`
+            }
           </div>`
           )
+          .join("")}
+      </div>
+      <div class="bar-axis" style="${spalten}">
+        ${daten
+          .map((d, i) => `<div class="bar-label">${dicht && i % 5 !== 0 ? "" : esc(String(d.label))}</div>`)
           .join("")}
       </div>
       <div class="hl-sub" style="margin-top:10px;">${untertitel}</div>

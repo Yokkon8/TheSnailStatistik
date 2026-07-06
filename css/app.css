@@ -287,15 +287,13 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
 .bar-chart { margin-top: 12px; }
 
 .bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
+  display: grid;
+  gap: 4px;
   height: 150px;
+  border-bottom: 1px solid var(--border);
 }
 
-.bar-col {
-  flex: 1;
-  height: 100%;
+.bar-slot {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -308,11 +306,26 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   width: 100%;
   max-width: 36px;
   background: var(--green);
-  border-radius: 4px 4px 0 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.bar.leer { height: 2px; background: var(--border); border-radius: 0; }
+
+.bar-axis {
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .bar-value { font-size: 11px; color: var(--muted); }
-.bar-label { font-size: 11px; color: var(--muted); }
+
+.bar-label {
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+  white-space: nowrap;
+  min-width: 0;
+}
 
 .settings-group { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 .settings-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -365,8 +378,9 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   .sync-status { display: none; }
   .sync-banner { flex-direction: column; text-align: center; }
   .bar-value { display: none; }
-  .bar-label { font-size: 9px; }
-  .bars { gap: 3px; height: 110px; }
+  .bar-label { font-size: 8.5px; }
+  .bars, .bar-axis { gap: 2px; }
+  .bars { height: 110px; }
 
   .nav {
     position: fixed;
