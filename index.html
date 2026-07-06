@@ -21,6 +21,7 @@
       <div class="brand">
         <img class="brand-logo" src="images/logo-horizontal.png" alt="The Snail">
         <div class="brand-sub">Dart-Statistik</div>
+        <div class="sync-status" id="sync-status"></div>
       </div>
       <nav class="nav" aria-label="Hauptnavigation">
         <a href="#/"><span class="ni" aria-hidden="true">📊</span><span class="nl">Übersicht</span></a>
@@ -33,6 +34,7 @@
     <main id="view" class="content"></main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>
+  <script src="js/vendor/msal-browser.min.js"></script>
   <script type="module" src="js/app.js"></script>
   <script>
     if ("serviceWorker" in navigator) {

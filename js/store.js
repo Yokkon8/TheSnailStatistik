@@ -1,5 +1,6 @@
-// Datenhaltung: aktuell lokal im Browser (localStorage).
-// Später ersetzbar durch eine Cloud-Synchronisation, ohne dass sich die App-Oberfläche ändert.
+// Datenhaltung: lokal im Browser (localStorage), optional synchronisiert
+// über SharePoint (siehe sync.js). Gelöschte Einträge werden als IDs in
+// deletedIds vermerkt, damit die Löschung alle Geräte erreicht.
 
 const KEY = "thesnail-data-v1";
 
@@ -50,6 +51,32 @@ export function newId() {
     : Date.now() + "-" + Math.random().toString(36).slice(2);
 }
 
+function emptyData() {
+  return { settings: { name: "" }, settingsUpdatedAt: "", highlights: [], deletedIds: [] };
+}
+
+// Führt lokalen und entfernten Stand zusammen: Vereinigung aller Einträge
+// (per ID), Löschungen gewinnen, Beispieldaten werden nie synchronisiert.
+export function mergeData(local, remote) {
+  const deleted = new Set([...(local.deletedIds ?? []), ...(remote.deletedIds ?? [])]);
+  const byId = new Map();
+  for (const h of [...(remote.highlights ?? []), ...(local.highlights ?? [])]) {
+    if (h.demo || deleted.has(h.id) || byId.has(h.id)) continue;
+    byId.set(h.id, h);
+  }
+  const localNewer = (local.settingsUpdatedAt ?? "") >= (remote.settingsUpdatedAt ?? "");
+  return {
+    settings: (localNewer ? local.settings : remote.settings) ?? { name: "" },
+    settingsUpdatedAt: localNewer ? (local.settingsUpdatedAt ?? "") : remote.settingsUpdatedAt,
+    highlights: [...byId.values()],
+    deletedIds: [...deleted],
+  };
+}
+
+function changed() {
+  window.dispatchEvent(new CustomEvent("thesnail-datachanged"));
+}
+
 export const store = {
   _cache: null,
 
@@ -63,10 +90,13 @@ export const store = {
         data = null;
       }
       if (!data || !Array.isArray(data.highlights)) {
-        data = { settings: { name: "The Snail" }, highlights: demoData() };
+        data = { ...emptyData(), settings: { name: "The Snail" }, highlights: demoData() };
         this._cache = data;
         this.save();
       } else {
+        // Ältere Speicherstände um neue Felder ergänzen
+        data.deletedIds = data.deletedIds ?? [];
+        data.settingsUpdatedAt = data.settingsUpdatedAt ?? "";
         this._cache = data;
       }
     }
@@ -80,12 +110,21 @@ export const store = {
   add(highlight) {
     this.load().highlights.push(highlight);
     this.save();
+    changed();
   },
 
   remove(id) {
     const data = this.load();
     data.highlights = data.highlights.filter((h) => h.id !== id);
+    if (!data.deletedIds.includes(id)) data.deletedIds.push(id);
     this.save();
+    changed();
+  },
+
+  touchSettings() {
+    this.load().settingsUpdatedAt = new Date().toISOString();
+    this.save();
+    changed();
   },
 
   hasDemo() {
@@ -99,12 +138,28 @@ export const store = {
   },
 
   replace(data) {
+    this._cache = {
+      ...emptyData(),
+      ...data,
+      deletedIds: data.deletedIds ?? [],
+      settingsUpdatedAt: data.settingsUpdatedAt ?? "",
+    };
+    this.save();
+    changed();
+  },
+
+  // Wie replace, aber ohne Änderungs-Signal – wird von der Synchronisation
+  // benutzt, damit kein Endlos-Kreislauf aus Sync → Änderung → Sync entsteht.
+  replaceQuiet(data) {
     this._cache = data;
     this.save();
   },
 
   reset() {
-    this._cache = { settings: { name: "" }, highlights: [] };
+    const data = this.load();
+    const ids = data.highlights.filter((h) => !h.demo).map((h) => h.id);
+    this._cache = { ...emptyData(), deletedIds: [...data.deletedIds, ...ids] };
     this.save();
+    changed();
   },
 };

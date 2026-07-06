@@ -1,16 +1,21 @@
 // Service Worker: macht die App offline-fähig und installierbar.
-const CACHE = "thesnail-v2";
+const CACHE = "thesnail-v3";
 const ASSETS = [
   "./",
   "./index.html",
   "./css/app.css",
   "./js/app.js",
   "./js/store.js",
+  "./js/config.js",
+  "./js/auth.js",
+  "./js/sync.js",
+  "./js/vendor/msal-browser.min.js",
   "./manifest.webmanifest",
   "./icons/favicon.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./images/logo-horizontal.png",
+  "./images/logo-fs.png",
 ];
 
 self.addEventListener("install", (event) => {

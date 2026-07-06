@@ -56,6 +56,35 @@ a { color: var(--blue); text-decoration: none; }
   padding-left: 4px;
 }
 
+.sync-status {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 10px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.sync-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sync-banner-logo {
+  width: 64px;
+  height: auto;
+  flex-shrink: 0;
+}
+
+.sync-banner-text {
+  flex: 1;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .nav { display: flex; flex-direction: column; gap: 4px; }
 
 .nav a {
@@ -297,6 +326,8 @@ select.year-select { width: auto; padding: 8px 12px; font-weight: 600; }
   .brand { padding: 2px 0; }
   .brand-logo { max-width: 150px; }
   .brand-sub { display: none; }
+  .sync-status { display: none; }
+  .sync-banner { flex-direction: column; text-align: center; }
 
   .nav {
     position: fixed;

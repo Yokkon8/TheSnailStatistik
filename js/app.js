@@ -1,4 +1,6 @@
 import { store, TYPES, SOURCES, newId } from "./store.js";
+import { auth } from "./auth.js";
+import { sync } from "./sync.js";
 
 const view = document.getElementById("view");
 const state = { year: null, filter: "alle" };
@@ -50,6 +52,28 @@ function highlightRow(h, withDelete) {
     </li>`;
 }
 
+// Hinweis-Banner zur Anmeldung, solange noch kein Microsoft-Konto verbunden ist
+function loginBanner() {
+  if (!auth.available() || auth.account()) return "";
+  return `
+    <div class="panel sync-banner">
+      <img class="sync-banner-logo" src="images/logo-fs.png" alt="">
+      <div class="sync-banner-text">Melde dich mit deinem Microsoft-Konto an, dann sind deine
+        Statistiken auf PC, iPhone und iPad immer auf demselben Stand.</div>
+      <button class="btn primary" id="btn-login">Mit Microsoft anmelden</button>
+    </div>`;
+}
+
+function syncInfoText() {
+  if (sync.status === "synct") return "☁️ Synchronisiere…";
+  if (sync.status === "fehler") return "⚠️ Letzter Versuch fehlgeschlagen: " + esc(sync.error ?? "");
+  if (sync.lastSync) {
+    const zeit = sync.lastSync.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    return `☁️ Zuletzt synchronisiert: ${zeit} Uhr`;
+  }
+  return "Noch nicht synchronisiert.";
+}
+
 // ---------- Übersicht ----------
 
 function renderDashboard(root) {
@@ -69,6 +93,7 @@ function renderDashboard(root) {
   root.innerHTML = `
     <h1>Übersicht</h1>
     <p class="page-sub">Deine Dart-Highlights auf einen Blick.</p>
+    ${loginBanner()}
     <div class="toolbar">
       <label for="year-select" style="color:var(--muted);font-weight:600;">Jahr:</label>
       <select id="year-select" class="year-select">
@@ -100,6 +125,7 @@ function renderDashboard(root) {
     state.year = e.target.value;
     renderDashboard(root);
   });
+  root.querySelector("#btn-login")?.addEventListener("click", () => auth.login());
 }
 
 // ---------- Highlights ----------
@@ -283,10 +309,29 @@ function renderQuellen(root) {
 
 function renderEinstellungen(root) {
   const data = store.load();
+  const account = auth.account();
+
+  const kontoBlock = account
+    ? `
+      <div><strong>${esc(account.name ?? "Angemeldet")}</strong><br>
+        <span class="hl-sub">${esc(account.username ?? "")}</span></div>
+      <div class="hl-sub">${syncInfoText()}</div>
+      <div class="settings-row">
+        <button class="btn" id="btn-sync-now">🔄 Jetzt synchronisieren</button>
+        <button class="btn" id="btn-logout">Abmelden</button>
+      </div>`
+    : auth.available()
+      ? `
+      <div class="hl-sub">Nicht angemeldet – deine Daten bleiben nur auf diesem Gerät.
+        Nach der Anmeldung werden sie über deinen SharePoint auf allen Geräten synchronisiert.</div>
+      <div class="settings-row">
+        <button class="btn primary" id="btn-login">Mit Microsoft anmelden</button>
+      </div>`
+      : `<div class="hl-sub">Die Anmelde-Funktion konnte nicht geladen werden.</div>`;
 
   root.innerHTML = `
     <h1>Mehr</h1>
-    <p class="page-sub">Profil, Datensicherung und App-Infos.</p>
+    <p class="page-sub">Profil, Konto, Datensicherung und App-Infos.</p>
 
     <h2>Profil</h2>
     <div class="panel settings-group">
@@ -294,6 +339,9 @@ function renderEinstellungen(root) {
         <input type="text" id="player-name" value="${esc(data.settings.name ?? "")}" maxlength="40">
       </label>
     </div>
+
+    <h2>Konto &amp; Synchronisation</h2>
+    <div class="panel settings-group">${kontoBlock}</div>
 
     <h2>Daten</h2>
     <div class="panel settings-group">
@@ -324,8 +372,15 @@ function renderEinstellungen(root) {
 
   root.querySelector("#player-name").addEventListener("change", (e) => {
     data.settings.name = e.target.value.trim();
-    store.save();
+    store.touchSettings();
     toast("Name gespeichert");
+  });
+
+  root.querySelector("#btn-login")?.addEventListener("click", () => auth.login());
+  root.querySelector("#btn-logout")?.addEventListener("click", () => auth.logout());
+  root.querySelector("#btn-sync-now")?.addEventListener("click", () => {
+    toast("Synchronisation gestartet …");
+    sync.fullSync();
   });
 
   root.querySelector("#btn-export").addEventListener("click", () => {
@@ -393,3 +448,36 @@ function navigate() {
 
 window.addEventListener("hashchange", navigate);
 navigate();
+
+// ---------- Anmeldung & Synchronisation ----------
+
+const statusEl = document.getElementById("sync-status");
+
+function updateSyncStatus() {
+  if (!statusEl) return;
+  if (!auth.available() || !auth.account()) {
+    statusEl.textContent = "Daten nur auf diesem Gerät";
+  } else if (sync.status === "synct") {
+    statusEl.textContent = "☁️ Synchronisiere…";
+  } else if (sync.status === "fehler") {
+    statusEl.textContent = "⚠️ Synchronisation gestört";
+  } else if (sync.lastSync) {
+    statusEl.textContent = "☁️ Synchronisiert";
+  } else {
+    statusEl.textContent = "☁️ Angemeldet";
+  }
+}
+
+window.addEventListener("thesnail-sync", () => {
+  updateSyncStatus();
+  // Aktuelle Seite auffrischen – außer im Erfassen-Formular, um Eingaben nicht zu stören
+  const hash = location.hash.replace(/^#/, "") || "/";
+  if (hash !== "/erfassen") navigate();
+});
+
+updateSyncStatus();
+sync.init().then(() => {
+  updateSyncStatus();
+  const hash = location.hash.replace(/^#/, "") || "/";
+  if (hash !== "/erfassen") navigate();
+});
