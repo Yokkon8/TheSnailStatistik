@@ -123,6 +123,13 @@ function highlightRow(h, withDelete) {
     </li>`;
 }
 
+// Eingebaute Quellen + selbst angelegte (Name dient als Schlüssel und Anzeige)
+function allSources(data) {
+  const map = { ...SOURCES };
+  for (const name of data.customSources ?? []) map[name] = name;
+  return map;
+}
+
 // Manuelle Highlights + aus Scolia abgeleitete Ereignisse, ohne Doppelzählung:
 // manuelle Einträge mit Quelle Scolia entfallen, wenn derselbe Typ bereits
 // automatisch aus dem Scolia-Import kommt.
@@ -391,7 +398,7 @@ function renderHighlights(root) {
   if (state.hlYear !== "alle") list = list.filter((h) => h.date.startsWith(state.hlYear));
   list = sortedHighlights(list);
 
-  const quellen = [["alle", "Alle Quellen"], ...Object.entries(SOURCES)];
+  const quellen = [["alle", "Alle Quellen"], ...Object.entries(allSources(data))];
 
   root.innerHTML = `
     <h1>Highlights</h1>
@@ -408,7 +415,7 @@ function renderHighlights(root) {
       ${quellen
         .map(
           ([key, label]) =>
-            `<button class="chip ${state.sourceFilter === key ? "active" : ""}" data-source="${key}">${label}</button>`
+            `<button class="chip ${state.sourceFilter === key ? "active" : ""}" data-source="${esc(key)}">${esc(label)}</button>`
         )
         .join("")}
     </div>
@@ -498,10 +505,10 @@ function renderErfassen(root) {
       </label>
       <label class="field">Quelle
         <select name="source">
-          ${Object.entries(SOURCES)
+          ${Object.entries(allSources(store.load()))
             .map(
               ([key, label]) =>
-                `<option value="${key}" ${key === (editing?.source ?? "manuell") ? "selected" : ""}>${label}</option>`
+                `<option value="${esc(key)}" ${key === (editing?.source ?? "manuell") ? "selected" : ""}>${esc(label)}</option>`
             )
             .join("")}
         </select>
@@ -639,11 +646,64 @@ function renderQuellen(root) {
         )
         .join("")}
     </div>
+    <h2>Eigene Quellen</h2>
+    <div class="panel settings-group">
+      <div class="hl-sub">Leg eigene Quellen an – z. B. für dein Vereins-Board oder eine andere App.
+        Sie erscheinen beim Erfassen und im Highlights-Filter und werden mitsynchronisiert.</div>
+      ${
+        (store.load().customSources ?? []).length
+          ? `<ul class="hl-list">${store
+              .load()
+              .customSources.map(
+                (name) => `
+              <li class="hl-row">
+                <div class="hl-main"><div class="hl-title">${esc(name)}</div></div>
+                <button class="icon-btn" data-del-source="${esc(name)}" title="Quelle entfernen">✕</button>
+              </li>`
+              )
+              .join("")}</ul>`
+          : ""
+      }
+      <div class="settings-row">
+        <input type="text" id="new-source" placeholder="Name, z. B. Vereinsabend" maxlength="30" style="max-width:280px;">
+        <button class="btn" id="btn-add-source">➕ Hinzufügen</button>
+      </div>
+    </div>
+
     <div class="hint">
       💡 Einzelne Highlights (z. B. einen 180er vom Ligaspiel) kannst du jederzeit unter
       <a href="#/erfassen">Erfassen</a> manuell eintragen – die Quelle wird mitgespeichert.
     </div>
   `;
+
+  const neueQuelle = () => {
+    const eingabe = root.querySelector("#new-source");
+    try {
+      store.addCustomSource(eingabe.value);
+      toast(`Quelle „${eingabe.value.trim()}" angelegt ✅`);
+      renderQuellen(root);
+    } catch (e) {
+      toast(e.message);
+    }
+  };
+  root.querySelector("#btn-add-source").addEventListener("click", neueQuelle);
+  root.querySelector("#new-source").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") neueQuelle();
+  });
+  root.querySelectorAll("[data-del-source]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      const name = btn.dataset.delSource;
+      const verwendet = store.load().highlights.filter((h) => h.source === name).length;
+      const frage = verwendet
+        ? `Quelle „${name}" entfernen? ${verwendet} Eintrag/Einträge behalten den Namen als Quelle.`
+        : `Quelle „${name}" entfernen?`;
+      if (confirm(frage)) {
+        store.removeCustomSource(name);
+        renderQuellen(root);
+        toast("Quelle entfernt");
+      }
+    })
+  );
 
   root.querySelector("#btn-dreik-toggle").addEventListener("click", () => {
     const wrap = root.querySelector("#dreik-wrap");

@@ -61,6 +61,7 @@ function emptyData() {
     scolia: {},
     scoliaClearedAt: "",
     dreik: null,
+    customSources: [],
   };
 }
 
@@ -103,6 +104,7 @@ export function mergeData(local, remote) {
     scolia,
     scoliaClearedAt: clearedAt,
     dreik,
+    customSources: [...new Set([...(local.customSources ?? []), ...(remote.customSources ?? [])])],
   };
 }
 
@@ -133,6 +135,7 @@ export const store = {
         data.scolia = data.scolia ?? {};
         data.scoliaClearedAt = data.scoliaClearedAt ?? "";
         data.dreik = data.dreik ?? null;
+        data.customSources = data.customSources ?? [];
         this._cache = data;
       }
     }
@@ -173,6 +176,30 @@ export const store = {
 
   setDreik(stats) {
     this.load().dreik = stats;
+    this.save();
+    changed();
+  },
+
+  addCustomSource(name) {
+    const data = this.load();
+    const bereinigt = name.trim();
+    if (!bereinigt) throw new Error("Bitte einen Namen eingeben");
+    const vorhanden = [
+      ...Object.keys(SOURCES),
+      ...Object.values(SOURCES),
+      ...data.customSources,
+    ].map((s) => s.toLowerCase());
+    if (vorhanden.includes(bereinigt.toLowerCase())) {
+      throw new Error(`„${bereinigt}" gibt es schon als Quelle`);
+    }
+    data.customSources.push(bereinigt);
+    this.save();
+    changed();
+  },
+
+  removeCustomSource(name) {
+    const data = this.load();
+    data.customSources = data.customSources.filter((s) => s !== name);
     this.save();
     changed();
   },
