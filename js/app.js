@@ -12,6 +12,7 @@ import {
 } from "./scolia.js";
 import { importDreikStats, dreikShortLegs, dreikBestesLeg } from "./dreik.js";
 import { importGdpStats } from "./godartspro.js";
+import { createLiveController } from "./scolialive.js";
 
 const view = document.getElementById("view");
 const state = {
@@ -943,6 +944,266 @@ function renderEinstellungen(root) {
   });
 }
 
+// ---------- Live-Modus (Scolia-API) ----------
+
+const LIVE_SERIAL_KEY = "thesnail-scolia-serial";
+const LIVE_TOKEN_KEY = "thesnail-scolia-token";
+
+// Bleibt über Seitenwechsel hinweg bestehen (Verbindung läuft weiter)
+const live = {
+  controller: null,
+  status: "getrennt",
+  statusInfo: "",
+  board: null,
+  config: { startScore: 501, doubleOut: true },
+  remaining: 501,
+  darts: 0,
+  throws: 0,
+  lastThrow: "",
+  log: [],
+};
+
+function liveLog(icon, text) {
+  live.log.unshift({
+    icon,
+    text,
+    time: new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+  });
+  live.log = live.log.slice(0, 40);
+}
+
+function liveSaveHighlight(type, value) {
+  store.add({
+    id: newId(),
+    type,
+    value: value ?? null,
+    date: new Date().toISOString().slice(0, 10),
+    source: "scolia",
+    note: "Live erfasst",
+  });
+}
+
+function handleEngineEvents(events, state) {
+  for (const ev of events) {
+    if (ev.kind === "highscore") {
+      if (ev.score >= 180) {
+        liveLog("🎯", "180er!");
+        liveSaveHighlight("180", null);
+      } else {
+        liveLog("🔥", `${ev.score} Punkte (171+)`);
+        liveSaveHighlight("171", null);
+      }
+    } else if (ev.kind === "legWon") {
+      const teile = [`${ev.darts} Darts`, `Checkout ${ev.checkout}`];
+      liveLog("✅", `Leg gewonnen – ${teile.join(", ")}`);
+      if (ev.checkout >= 100) liveSaveHighlight("highfinish", ev.checkout);
+      if (ev.darts <= 20) liveSaveHighlight("shortleg", ev.darts);
+    } else if (ev.kind === "bust") {
+      liveLog("💥", "Überworfen");
+    }
+  }
+  if (state) {
+    live.remaining = state.remaining;
+    live.darts = state.dartsThisLeg;
+  }
+  updateLiveDom();
+}
+
+function ensureLiveController() {
+  if (!live.controller) {
+    live.controller = createLiveController({
+      onStatus: (s, info) => {
+        live.status = s;
+        live.statusInfo = info ?? "";
+        if (s !== "verbunden") live.board = null;
+        updateLiveDom();
+      },
+      onBoard: (p) => {
+        live.board = p;
+        updateLiveDom();
+      },
+      onThrow: (p) => {
+        live.throws++;
+        live.lastThrow = p.bounceout ? "Bounce-out" : p.sector;
+      },
+      onEngine: handleEngineEvents,
+    });
+  }
+  return live.controller;
+}
+
+function liveStatusLabel() {
+  if (live.status === "verbunden") return "🟢 Verbunden";
+  if (live.status === "fehler") return "🔴 Verbindungsfehler";
+  return "⚪ Getrennt";
+}
+
+function boardLabel() {
+  if (!live.board) return "–";
+  const s = live.board.boardStatus ?? "?";
+  const p = live.board.boardPhase ? ` · ${live.board.boardPhase}` : "";
+  return s + p;
+}
+
+// Aktualisiert nur die dynamischen Teile der Live-Seite (ohne Neuaufbau),
+// damit die laufende Sitzung nicht gestört wird.
+function updateLiveDom() {
+  if ((location.hash.replace(/^#/, "") || "/") !== "/live") return;
+  const set = (id, txt) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = txt;
+  };
+  set("live-status", liveStatusLabel());
+  set("live-board", boardLabel());
+  set("live-remaining", fmtNum(live.remaining));
+  set("live-darts", `${live.darts} Darts`);
+  set("live-throws", `${live.throws} Würfe erkannt`);
+  const btn = document.getElementById("live-connect");
+  if (btn) btn.textContent = live.status === "verbunden" ? "Trennen" : "Verbinden";
+  const logEl = document.getElementById("live-log");
+  if (logEl) {
+    logEl.innerHTML = live.log.length
+      ? live.log
+          .map(
+            (e) =>
+              `<li class="hl-row"><span class="live-log-icon">${e.icon}</span><div class="hl-main"><div class="hl-title">${esc(e.text)}</div><div class="hl-sub">${e.time} Uhr</div></div></li>`
+          )
+          .join("")
+      : `<li class="panel empty" style="padding:20px;">Noch keine Ereignisse in dieser Sitzung.</li>`;
+  }
+}
+
+// Zeitgesteuerter Testlauf ohne Board: spielt ein 501-Leg mit 180er, 171+
+// und 150-Finish (9-Darter) durch, damit die Erkennung sichtbar wird.
+function runLiveDemo() {
+  const c = ensureLiveController();
+  c.newLeg(live.config);
+  live.throws = 0;
+  live.log = [];
+  liveLog("▶️", "Testlauf gestartet (ohne Board)");
+  updateLiveDom();
+  const schritte = [
+    ["T20"], ["T20"], ["T20"], ["takeout"],
+    ["T20"], ["T19"], ["T18"], ["takeout"],
+    ["T20"], ["T18"], ["D18"], ["takeout"],
+  ];
+  let i = 0;
+  const timer = setInterval(() => {
+    if (i >= schritte.length) {
+      clearInterval(timer);
+      return;
+    }
+    const s = schritte[i++];
+    if (s[0] === "takeout") c.simTakeout();
+    else c.simThrow(s[0]);
+  }, 550);
+}
+
+function renderLive(root) {
+  const serial = localStorage.getItem(LIVE_SERIAL_KEY) ?? "";
+  const token = localStorage.getItem(LIVE_TOKEN_KEY) ?? "";
+
+  root.innerHTML = `
+    <h1>Live-Training <span class="h2-sub">Scolia-Board</span></h1>
+    <p class="page-sub">Verbinde dich vor dem Solo-Training mit deinem Board – 180er,
+      High Finishes und Short Legs werden automatisch erkannt, während du wirfst.</p>
+
+    <h2>Verbindung</h2>
+    <div class="panel settings-group">
+      <label class="field">Seriennummer des Boards
+        <input type="text" id="live-serial" value="${esc(serial)}" placeholder="z. B. SCB-XXXX" autocomplete="off">
+      </label>
+      <label class="field">Zugangs-Token (Scolia Personal API)
+        <input type="password" id="live-token" value="${esc(token)}" placeholder="dein API-Token" autocomplete="off">
+      </label>
+      <div class="settings-row">
+        <button class="btn primary" id="live-connect">${live.status === "verbunden" ? "Trennen" : "Verbinden"}</button>
+        <span id="live-status">${liveStatusLabel()}</span>
+      </div>
+      <div class="hl-sub">Board: <span id="live-board">${boardLabel()}</span></div>
+      <div class="hl-sub">🔒 Seriennummer und Token bleiben nur auf diesem Gerät (nicht in der Cloud).
+        Solo-Training: funktioniert, wenn nur du am Board wirfst.</div>
+    </div>
+
+    <h2>Aktuelles Leg</h2>
+    <div class="panel settings-group">
+      <div class="settings-row">
+        <label class="field" style="max-width:150px;">Start
+          <select id="live-start">
+            <option value="501" ${live.config.startScore === 501 ? "selected" : ""}>501</option>
+            <option value="301" ${live.config.startScore === 301 ? "selected" : ""}>301</option>
+          </select>
+        </label>
+        <label class="field" style="max-width:150px;">Doppel-Aus
+          <select id="live-doubleout">
+            <option value="1" ${live.config.doubleOut ? "selected" : ""}>An</option>
+            <option value="0" ${live.config.doubleOut ? "" : "selected"}>Aus</option>
+          </select>
+        </label>
+      </div>
+      <div class="live-scoreboard">
+        <div><div class="stat-num green" id="live-remaining">${fmtNum(live.remaining)}</div><div class="stat-label">Rest</div></div>
+        <div><div class="stat-num" id="live-darts">${live.darts} Darts</div><div class="stat-label">im Leg</div></div>
+      </div>
+      <div class="settings-row">
+        <button class="btn" id="live-newleg">Neues Leg</button>
+        <button class="btn" id="live-demo">▶️ Testlauf ohne Board</button>
+        <span class="hl-sub" id="live-throws">${live.throws} Würfe erkannt</span>
+      </div>
+    </div>
+
+    <h2>Erkannte Highlights <span class="h2-sub">diese Sitzung</span></h2>
+    <ul class="hl-list" id="live-log"></ul>
+  `;
+
+  const serialInput = root.querySelector("#live-serial");
+  const tokenInput = root.querySelector("#live-token");
+
+  root.querySelector("#live-start").addEventListener("change", (e) => {
+    live.config.startScore = Number(e.target.value);
+    live.remaining = live.config.startScore;
+    live.controller?.newLeg(live.config);
+    updateLiveDom();
+  });
+  root.querySelector("#live-doubleout").addEventListener("change", (e) => {
+    live.config.doubleOut = e.target.value === "1";
+    live.controller?.newLeg(live.config);
+  });
+
+  root.querySelector("#live-connect").addEventListener("click", () => {
+    const c = ensureLiveController();
+    if (live.status === "verbunden") {
+      c.disconnect();
+      toast("Verbindung getrennt");
+      return;
+    }
+    const s = serialInput.value.trim();
+    const t = tokenInput.value.trim();
+    if (!s || !t) {
+      toast("Bitte Seriennummer und Token eingeben");
+      return;
+    }
+    localStorage.setItem(LIVE_SERIAL_KEY, s);
+    localStorage.setItem(LIVE_TOKEN_KEY, t);
+    live.remaining = live.config.startScore;
+    live.darts = 0;
+    toast("Verbinde mit dem Board …");
+    c.connect(s, t, live.config);
+  });
+
+  root.querySelector("#live-newleg").addEventListener("click", () => {
+    ensureLiveController().newLeg(live.config);
+    live.remaining = live.config.startScore;
+    live.darts = 0;
+    updateLiveDom();
+    toast("Neues Leg gestartet");
+  });
+
+  root.querySelector("#live-demo").addEventListener("click", runLiveDemo);
+
+  updateLiveDom();
+}
+
 // ---------- Router ----------
 
 const routes = {
@@ -950,6 +1211,7 @@ const routes = {
   "/highlights": renderHighlights,
   "/erfassen": renderErfassen,
   "/quellen": renderQuellen,
+  "/live": renderLive,
   "/einstellungen": renderEinstellungen,
 };
 
@@ -990,12 +1252,12 @@ window.addEventListener("thesnail-sync", () => {
   updateSyncStatus();
   // Aktuelle Seite auffrischen – außer im Erfassen-Formular, um Eingaben nicht zu stören
   const hash = location.hash.replace(/^#/, "") || "/";
-  if (hash !== "/erfassen") navigate();
+  if (hash !== "/erfassen" && hash !== "/live") navigate();
 });
 
 updateSyncStatus();
 sync.init().then(() => {
   updateSyncStatus();
   const hash = location.hash.replace(/^#/, "") || "/";
-  if (hash !== "/erfassen") navigate();
+  if (hash !== "/erfassen" && hash !== "/live") navigate();
 });

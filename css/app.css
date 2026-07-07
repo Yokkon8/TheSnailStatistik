@@ -192,6 +192,19 @@ h2 { font-size: 18px; margin: 28px 0 12px; }
 .trend.up { color: var(--green); }
 .trend.down { color: var(--red); }
 
+/* ---------- Live-Modus ---------- */
+
+.live-scoreboard {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  padding: 6px 2px;
+}
+.live-scoreboard .stat-num { font-size: 44px; }
+.live-scoreboard .stat-num#live-darts { font-size: 22px; color: var(--text); }
+
+.live-log-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
+
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 
 .chip {
