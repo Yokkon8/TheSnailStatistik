@@ -61,6 +61,7 @@ function emptyData() {
     scolia: {},
     scoliaClearedAt: "",
     dreik: null,
+    gdp: null,
     customSources: [],
   };
 }
@@ -89,12 +90,17 @@ export function mergeData(local, remote) {
     }
   }
 
-  // 3K-Bilanz: der neuere Import gewinnt
-  let dreik = null;
-  for (const kandidat of [remote.dreik, local.dreik]) {
-    if (!kandidat || (kandidat.importedAt ?? "") <= clearedAt) continue;
-    if (!dreik || (kandidat.importedAt ?? "") > (dreik.importedAt ?? "")) dreik = kandidat;
-  }
+  // Plattform-Bilanzen (3K, GoDartsPro): der neuere Import gewinnt
+  const neuere = (a, b) => {
+    let sieger = null;
+    for (const kandidat of [a, b]) {
+      if (!kandidat || (kandidat.importedAt ?? "") <= clearedAt) continue;
+      if (!sieger || (kandidat.importedAt ?? "") > (sieger.importedAt ?? "")) sieger = kandidat;
+    }
+    return sieger;
+  };
+  const dreik = neuere(remote.dreik, local.dreik);
+  const gdp = neuere(remote.gdp, local.gdp);
 
   return {
     settings: (localNewer ? local.settings : remote.settings) ?? { name: "" },
@@ -104,6 +110,7 @@ export function mergeData(local, remote) {
     scolia,
     scoliaClearedAt: clearedAt,
     dreik,
+    gdp,
     customSources: [...new Set([...(local.customSources ?? []), ...(remote.customSources ?? [])])],
   };
 }
@@ -135,6 +142,7 @@ export const store = {
         data.scolia = data.scolia ?? {};
         data.scoliaClearedAt = data.scoliaClearedAt ?? "";
         data.dreik = data.dreik ?? null;
+        data.gdp = data.gdp ?? null;
         data.customSources = data.customSources ?? [];
         this._cache = data;
       }
@@ -176,6 +184,12 @@ export const store = {
 
   setDreik(stats) {
     this.load().dreik = stats;
+    this.save();
+    changed();
+  },
+
+  setGdp(stats) {
+    this.load().gdp = stats;
     this.save();
     changed();
   },

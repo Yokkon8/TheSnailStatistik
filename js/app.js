@@ -11,6 +11,7 @@ import {
   scoliaHighlightEvents,
 } from "./scolia.js";
 import { importDreikStats, dreikShortLegs, dreikBestesLeg } from "./dreik.js";
+import { importGdpStats } from "./godartspro.js";
 
 const view = document.getElementById("view");
 const state = {
@@ -289,6 +290,19 @@ function dreikSection(data, info) {
   `;
 }
 
+// GoDartsPro-Trainingsbilanz: Gesamtwerte ohne Datum – nur bei "Alle Jahre"
+function gdpSection(data, info) {
+  const g = data.gdp;
+  if (!g || info.mode !== "jahre") return "";
+  return `
+    <h2>Trainings-Bilanz <span class="h2-sub">aus GoDartsPro · alle Zeiten</span></h2>
+    <div class="stat-grid">
+      ${g.sessions !== undefined ? `<div class="stat"><div class="stat-num red">${fmtNum(g.sessions)}</div><div class="stat-label">Trainings-Sessions</div></div>` : ""}
+      ${g.darts !== undefined ? `<div class="stat"><div class="stat-num red">${fmtNum(g.darts)}</div><div class="stat-label">Trainings-Darts</div></div>` : ""}
+    </div>
+  `;
+}
+
 // ---------- Übersicht ----------
 
 function renderDashboard(root) {
@@ -347,6 +361,7 @@ function renderDashboard(root) {
     ${hatScoliaAnteil ? `<div class="hl-sub" style="margin-top:8px;">Zusammengefasst aus manueller Erfassung und Scolia-Import.</div>` : ""}
     ${scoliaSection(data, info)}
     ${dreikSection(data, info)}
+    ${gdpSection(data, info)}
     <h2>Letzte Highlights</h2>
     ${
       latest.length
@@ -598,10 +613,19 @@ function renderQuellen(root) {
     },
     {
       name: "GoDartsPro",
-      status: "Noch nicht verbunden",
-      ok: false,
-      desc: "Online-Trainingsplattform mit Übungen und Auswertungen. Geplant: Übernahme deiner Trainingsergebnisse.",
-      actions: "",
+      status: store.load().gdp ? "Bilanz importiert" : "Noch nicht verbunden",
+      ok: !!store.load().gdp,
+      desc: "Online-Trainingsplattform. Kopiere unter „Extended Statistics“ die „Members statistics summary“ und füge sie hier ein – die einzelnen Trainingsspiele werden nicht übernommen. (Bei Scolia-Kopplung dient dein Board nur als Kamera: Trainings-Würfe zählen nicht in der Scolia-Statistik.)",
+      actions: `
+        <div class="settings-row">
+          <button class="btn" id="btn-gdp-toggle">📋 Statistik einfügen</button>
+        </div>
+        <div id="gdp-wrap" hidden>
+          <textarea id="gdp-text" rows="4" placeholder="Kopierte „Members statistics summary“ hier einfügen …"></textarea>
+          <div class="settings-row" style="margin-top:8px;">
+            <button class="btn primary" id="btn-gdp-parse">Einlesen</button>
+          </div>
+        </div>`,
     },
     {
       name: "Russ Bray Darts Scorer",
@@ -704,6 +728,21 @@ function renderQuellen(root) {
       }
     })
   );
+
+  root.querySelector("#btn-gdp-toggle").addEventListener("click", () => {
+    const wrap = root.querySelector("#gdp-wrap");
+    wrap.hidden = !wrap.hidden;
+    if (!wrap.hidden) root.querySelector("#gdp-text").focus();
+  });
+  root.querySelector("#btn-gdp-parse").addEventListener("click", () => {
+    try {
+      const stats = importGdpStats(root.querySelector("#gdp-text").value);
+      toast(`GoDartsPro-Bilanz eingelesen: ${fmtNum(stats.sessions ?? 0)} Sessions ✅`);
+      renderQuellen(root);
+    } catch (e) {
+      toast(e.message || "Einlesen fehlgeschlagen");
+    }
+  });
 
   root.querySelector("#btn-dreik-toggle").addEventListener("click", () => {
     const wrap = root.querySelector("#dreik-wrap");
