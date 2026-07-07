@@ -15,9 +15,13 @@ export const TYPES = {
 export const SOURCES = {
   scolia: "Scolia",
   godartspro: "GoDartsPro",
-  russbray: "Russ Bray Scorer",
   "3kdarts": "3K Darts",
   manuell: "Manuell",
+};
+
+// Nicht mehr wählbare Quellen – alte Einträge behalten so ihren Anzeigenamen
+export const LEGACY_SOURCES = {
+  russbray: "Russ Bray Scorer",
 };
 
 function demoData() {

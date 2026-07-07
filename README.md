@@ -70,7 +70,8 @@ Ein Highlight-Eintrag:
 2. ✅ Hosting über GitHub Pages: <https://yokkon8.github.io/TheSnailStatistik/>
 3. ⬜ Automatische Synchronisation zwischen Geräten: App-Registrierung in
    Microsoft 365, Anmeldung per Microsoft-Konto, Daten in SharePoint (Microsoft Graph)
-4. ⬜ Schnittstellen: **Scolia** (Auto-Scoring-Kamera), **GoDartsPro**
-   (Trainingsplattform), **Russ Bray Darts Scorer** (iPad-App)
+4. ✅ Schnittstellen: **Scolia** (CSV-Import), **3K Darts** (Text-Import),
+   **GoDartsPro** (Text-Import), eigene Quellen anlegbar
+   (Russ Bray Scorer auf Wunsch gestrichen)
 5. ⬜ Adressen/Kontakte hinterlegen (Vereine, Spielorte, Mitspieler)
 6. ⬜ Erweiterte Statistiken (Averages, Verlaufsdiagramme)

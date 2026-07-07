@@ -1,4 +1,4 @@
-import { store, TYPES, SOURCES, newId } from "./store.js";
+import { store, TYPES, SOURCES, LEGACY_SOURCES, newId } from "./store.js";
 import { auth } from "./auth.js";
 import { sync } from "./sync.js";
 import {
@@ -113,7 +113,7 @@ function highlightRow(h, withDelete) {
       <span class="badge t-${esc(h.type)}">${esc(typeLabel(h))}</span>
       <div class="hl-main">
         <div class="hl-title">${titel}</div>
-        <div class="hl-sub">${fmtDate(h.date)} &middot; ${esc(SOURCES[h.source] ?? h.source)}${h.virtual ? " (Import)" : ""}</div>
+        <div class="hl-sub">${fmtDate(h.date)} &middot; ${esc(SOURCES[h.source] ?? LEGACY_SOURCES[h.source] ?? h.source)}${h.virtual ? " (Import)" : ""}</div>
       </div>
       ${
         withDelete && !h.virtual
@@ -526,6 +526,11 @@ function renderErfassen(root) {
                 `<option value="${esc(key)}" ${key === (editing?.source ?? "manuell") ? "selected" : ""}>${esc(label)}</option>`
             )
             .join("")}
+          ${
+            editing && !allSources(store.load())[editing.source]
+              ? `<option value="${esc(editing.source)}" selected>${esc(LEGACY_SOURCES[editing.source] ?? editing.source)}</option>`
+              : ""
+          }
         </select>
       </label>
       <label class="field">Notiz (optional)
@@ -626,13 +631,6 @@ function renderQuellen(root) {
             <button class="btn primary" id="btn-gdp-parse">Einlesen</button>
           </div>
         </div>`,
-    },
-    {
-      name: "Russ Bray Darts Scorer",
-      status: "Noch nicht verbunden",
-      ok: false,
-      desc: "Scoring-App auf deinem iPad. Geplant: Import deiner Spielstatistiken per Datei-Export.",
-      actions: "",
     },
     {
       name: "3K Darts",
