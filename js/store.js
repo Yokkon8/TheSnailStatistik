@@ -10,6 +10,7 @@ export const TYPES = {
   "140": "140+",
   highfinish: "High Finish",
   shortleg: "Short Leg",
+  rangliste: "Ranglisten-Platz",
 };
 
 export const SOURCES = {

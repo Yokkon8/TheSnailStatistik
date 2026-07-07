@@ -186,6 +186,11 @@ h2 { font-size: 18px; margin: 28px 0 12px; }
 .t-140 { background: rgba(77, 159, 255, 0.12); color: var(--blue); border-color: rgba(77, 159, 255, 0.4); }
 .t-highfinish { background: rgba(47, 191, 113, 0.12); color: var(--green); border-color: rgba(47, 191, 113, 0.4); }
 .t-shortleg { background: rgba(196, 125, 255, 0.12); color: #c47dff; border-color: rgba(196, 125, 255, 0.4); }
+.t-rangliste { background: rgba(45, 212, 191, 0.12); color: #2dd4bf; border-color: rgba(45, 212, 191, 0.4); }
+
+.trend { font-size: 14px; font-weight: 700; color: var(--muted); }
+.trend.up { color: var(--green); }
+.trend.down { color: var(--red); }
 
 .chip-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 

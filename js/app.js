@@ -85,6 +85,7 @@ function fmtDate(iso) {
 function typeLabel(h) {
   if (h.type === "shortleg") return `${h.value}-Darter`;
   if (h.type === "highfinish") return `${h.value}er Finish`;
+  if (h.type === "rangliste") return `Platz ${h.value}`;
   return TYPES[h.type] ?? h.type;
 }
 
@@ -290,6 +291,45 @@ function dreikSection(data, info) {
   `;
 }
 
+// Ranglisten-Stände: pro Rangliste (Notiz = Name) der neueste Eintrag im
+// Zeitraum, mit Trend gegenüber dem vorherigen Eintrag
+function ranglisteSection(events) {
+  const eintraege = events.filter((e) => e.type === "rangliste" && e.value);
+  if (!eintraege.length) return "";
+
+  const nachListe = new Map();
+  for (const e of eintraege) {
+    const name = (e.note || "Rangliste").trim();
+    if (!nachListe.has(name)) nachListe.set(name, []);
+    nachListe.get(name).push(e);
+  }
+
+  const karten = [...nachListe.entries()]
+    .map(([name, liste]) => {
+      liste.sort((a, b) => b.date.localeCompare(a.date));
+      const aktuell = liste[0];
+      const vorher = liste[1];
+      let trend = "";
+      if (vorher) {
+        const diff = vorher.value - aktuell.value;
+        if (diff > 0) trend = `<span class="trend up" title="vorher Platz ${vorher.value}">▲ ${diff}</span>`;
+        else if (diff < 0) trend = `<span class="trend down" title="vorher Platz ${vorher.value}">▼ ${Math.abs(diff)}</span>`;
+        else trend = `<span class="trend" title="unverändert">＝</span>`;
+      }
+      return `
+      <div class="stat">
+        <div class="stat-num">${fmtNum(aktuell.value)}.${trend ? " " + trend : ""}</div>
+        <div class="stat-label">${esc(name)}</div>
+        <div class="hl-sub" style="margin-top:2px;">${fmtDate(aktuell.date)}</div>
+      </div>`;
+    })
+    .join("");
+
+  return `
+    <h2>Rangliste <span class="h2-sub">zuletzt eingetragener Stand</span></h2>
+    <div class="stat-grid">${karten}</div>`;
+}
+
 // GoDartsPro-Trainingsbilanz: Gesamtwerte ohne Datum – nur bei "Alle Jahre"
 function gdpSection(data, info) {
   const g = data.gdp;
@@ -359,6 +399,7 @@ function renderDashboard(root) {
       <div class="stat"><div class="stat-num">${bestLeg ? bestLeg : "–"}</div><div class="stat-label">Bestes Leg (Darts)</div></div>
     </div>
     ${hatScoliaAnteil ? `<div class="hl-sub" style="margin-top:8px;">Zusammengefasst aus manueller Erfassung und Scolia-Import.</div>` : ""}
+    ${ranglisteSection(events)}
     ${scoliaSection(data, info)}
     ${dreikSection(data, info)}
     ${gdpSection(data, info)}
@@ -401,6 +442,7 @@ function renderHighlights(root) {
     ["171", "171+"],
     ["highfinish", "High Finish"],
     ["shortleg", "Short Legs"],
+    ["rangliste", "Rangliste"],
   ];
   const events = combinedEvents(data, () => true);
 
@@ -512,6 +554,7 @@ function renderErfassen(root) {
           ${startTyp === "140" ? `<option value="140" selected>140+</option>` : ""}
           <option value="highfinish" ${startTyp === "highfinish" ? "selected" : ""}>High Finish (Checkout ab 100)</option>
           <option value="shortleg" ${startTyp === "shortleg" ? "selected" : ""}>Short Leg (11- bis 20-Darter)</option>
+          <option value="rangliste" ${startTyp === "rangliste" ? "selected" : ""}>Ranglisten-Platz</option>
         </select>
       </label>
       <div id="value-wrap"></div>
@@ -562,9 +605,16 @@ function renderErfassen(root) {
         <label class="field">Checkout (Punkte)
           <input type="number" name="value" min="100" max="170" value="${startWert ?? 100}" required>
         </label>`;
+    } else if (t === "rangliste") {
+      valueWrap.innerHTML = `
+        <label class="field">Platz (Position in der Rangliste)
+          <input type="number" name="value" min="1" max="9999" value="${startWert ?? 1}" required>
+        </label>`;
     } else {
       valueWrap.innerHTML = "";
     }
+    root.querySelector('[name="note"]').placeholder =
+      t === "rangliste" ? "Name der Rangliste, z. B. BDV Rangliste" : "z. B. Ligaspiel gegen …";
   }
 
   typeSelect.addEventListener("change", updateValueField);
